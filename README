@@ -1,0 +1,1 @@
+Various mandelbrot software. Use e.g. mandeldump on a .def file then mandelmakepic to render a tga from the .mdump file.
