@@ -9,6 +9,8 @@
 #include <string.h>
 #include <math.h>
 #include <netinet/in.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #define WIDTH 20480
 #define HEIGHT 12800
@@ -290,7 +292,7 @@ void usage(char *progname) {
 
 int main(int argc,char *argv[])
 {
- unsigned int x,y, width=WIDTH, height=HEIGHT;
+  unsigned int x,y, width=WIDTH, height=HEIGHT, xstart=0, ystart=0;
  unsigned long wtmp, htmp;
  mpf_t x0,x1,y0,y1,centx,centy,dx,xval,yval,vx;
 
@@ -307,6 +309,7 @@ int main(int argc,char *argv[])
  unsigned int colornum;
  char *p;
  FILE *outfile=NULL;
+ struct stat outfilestat;
 
  char *ofilename=NULL;
  int o;
@@ -397,21 +400,48 @@ int main(int argc,char *argv[])
  gmp_printf("\npixel=%Fg - epsilons are: float=%Fg, double=%Fg, long double=%Fg, gmp=%Fg\n",
 	    vx, mind_f, mind_d, mind_ld, mind_gmp);
 
+ // Check the output file and open it
  strcpy(filename,ofilename);
 
  if ((p=(char *)strrchr(filename,'.'))!=NULL)
    *p='\0';
  strcat(filename,".mdump");
- outfile=fopen(filename, "wb");
- if (!outfile) {
-   perror(filename);
-   return -1;
+
+ // Try to determine if we were doing a dump already to this file, and if the width and height
+ // for that dump were the same as this one. If so, continue where we left off.
+ xstart=0;
+ ystart=0;
+ outfile=NULL;
+ if (!stat(filename, &outfilestat)) {
+   outfile=fopen(filename, "rb");
+   if (fread(&wtmp, sizeof(wtmp), 1, outfile) == 1 &&
+       fread(&htmp, sizeof(htmp), 1, outfile) == 1 &&
+       ntohl(wtmp) == width &&
+       ntohl(htmp) == height) {
+     long alreadydone = (outfilestat.st_size - (sizeof(htmp) + sizeof(wtmp))) / sizeof(colornum);
+     xstart = alreadydone % width;
+     ystart = alreadydone / width;
+     fprintf(stderr, "Continuing at (%d,%d)\n", xstart, ystart);
+     fclose(outfile);
+     outfile=fopen(filename, "ab");     
+   } else {
+     fclose(outfile);
+     outfile=NULL;
+   }
  }
 
- wtmp=htonl(width);
- htmp=htonl(height);
- fwrite(&wtmp, sizeof(wtmp), 1, outfile);
- fwrite(&htmp, sizeof(htmp), 1, outfile);
+ if (outfile == NULL) {
+   outfile=fopen(filename, "wb");
+   if (!outfile) {
+     perror(filename);
+     return -1;
+   }
+
+   wtmp=htonl(width);
+   htmp=htonl(height);
+   fwrite(&wtmp, sizeof(wtmp), 1, outfile);
+   fwrite(&htmp, sizeof(htmp), 1, outfile);
+ }
 
  if (minprec <= 0 && mpf_cmp(vx, mind_f) > 0) {
    float x0_f, y0_f, x1_f, y1_f, xval_f, yval_f;
@@ -420,15 +450,17 @@ int main(int argc,char *argv[])
    y0_f=mpf_get_d(y0);
    x1_f=mpf_get_d(x1);
    y1_f=mpf_get_d(y1);
-   for (y=0;y<height;y++) {   
+   for (y=ystart;y<height;y++) {   
      fprintf(stderr,"  Line: %d\r",y);
      yval_f = y0_f + (y1_f - y0_f)*(float)(height-y)/(float)height;
-     for (x=0;x<width;x++) {
+     for (x=xstart;x<width;x++) {
        xval_f = x0_f + (x1_f - x0_f)*(float)x/(float)width;
        colornum=f_mandel(xval_f,yval_f);
        colornum=htonl(colornum);
        fwrite(&colornum, sizeof(colornum), 1, outfile);
      }
+     fflush(outfile);
+     xstart=0;
    }
  } else if (minprec <= 1 && mpf_cmp(vx, mind_d) > 0) {
    double x0_d, y0_d, x1_d, y1_d, xval_d, yval_d;
@@ -437,15 +469,17 @@ int main(int argc,char *argv[])
    y0_d=mpf_get_d(y0);
    x1_d=mpf_get_d(x1);
    y1_d=mpf_get_d(y1);
-   for (y=0;y<height;y++) {   
+   for (y=ystart;y<height;y++) {   
      fprintf(stderr,"  Line: %d\r",y);
      yval_d = y0_d + (y1_d - y0_d)*(double)(height-y)/(double)height;
-     for (x=0;x<width;x++) {
+     for (x=xstart;x<width;x++) {
        xval_d = x0_d + (x1_d - x0_d)*(double)x/(double)width;
        colornum=d_mandel(xval_d,yval_d);
        colornum=htonl(colornum);
        fwrite(&colornum, sizeof(colornum), 1, outfile);
      }
+     fflush(outfile);
+     xstart=0;
    }
  } else if (minprec <= 2 && mpf_cmp(vx, mind_ld) > 0) {
    long double x0_ld, y0_ld, x1_ld, y1_ld, xval_ld, yval_ld;
@@ -454,26 +488,28 @@ int main(int argc,char *argv[])
    y0_ld=mpf_get_d(y0);
    x1_ld=mpf_get_d(x1);
    y1_ld=mpf_get_d(y1);
-   for (y=0;y<height;y++) {   
+   for (y=ystart;y<height;y++) {   
      fprintf(stderr,"  Line: %d\r",y);
      yval_ld = y0_ld + (y1_ld - y0_ld)*(long double)(height-y)/(long double)height;
-     for (x=0;x<width;x++) {
+     for (x=xstart;x<width;x++) {
        xval_ld = x0_ld + (x1_ld - x0_ld)*(long double)x/(long double)width;
        colornum=ld_mandel(xval_ld,yval_ld);
        colornum=htonl(colornum);
        fwrite(&colornum, sizeof(colornum), 1, outfile);
      }
+     fflush(outfile);
+     xstart=0;
    }
  } else if (minprec <= 3 && mpf_cmp(vx, mind_gmp) > 0) {
    printf("(using \"gmp\" multi-precision arithmetic)\n");
-   for (y=0;y<height;y++) {   
+   for (y=ystart;y<height;y++) {   
      fprintf(stderr,"  Line: %d\r",y);
      mpf_sub(yval, y1, y0);
      mpf_mul_ui(yval, yval, height-y);
      mpf_div_ui(yval, yval, height);
      mpf_add(yval, yval, y0);
      
-     for (x=0;x<width;x++) {
+     for (x=xstart;x<width;x++) {
        mpf_sub(xval, x1, x0);
        mpf_mul_ui(xval, xval, x);
        mpf_div_ui(xval, xval, width);
@@ -482,6 +518,8 @@ int main(int argc,char *argv[])
        colornum=htonl(colornum);
        fwrite(&colornum, sizeof(colornum), 1, outfile);
      }
+     fflush(outfile);
+     xstart=0;
    }
  } else fprintf(stderr, "pixel width is too small!\n");
  fclose(outfile);
