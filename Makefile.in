@@ -45,6 +45,8 @@ LIB_OBJS=
 OBJS=$(OBJS1) $(OBJS2) $(OBJS3) $(OBJS4) $(OBJS5) $(OBJS6)
 SOURCES=$(SOURCES1) $(SOURCES2) $(SOURCES3) $(SOURCES4) $(SOURCES5) $(SOURCES6)
 TARGETS=$(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4) $(TARGET5) $(TARGET6)
+DISTSRC=aclocal.m4 config.h.in configure configure.in install-sh Makefile.in mkinstalldirs $(SOURCES) README
+DISTBIN=$(TARGETS) README
 
 all: $(TARGETS)
 
@@ -83,7 +85,7 @@ $(OBJS5): $(SOURCES5)
 $(OBJS6): $(SOURCES6)
 
 clean:
-	/bin/rm -f $(TARGETS) *.o core
+	/bin/rm -f $(TARGETS) *.o core $(PRODUCT)-$(VERSION)-*.tar.gz*
 
 distclean: clean config-clean
 
@@ -96,6 +98,12 @@ cfg-clean:
 mostlyclean: clean
 
 maintainer-clean: clean
+
+package: all
+	tar czf $(PRODUCT)-$(VERSION)-bin.tar.gz $(DISTBIN)
+	md5sum $(PRODUCT)-$(VERSION)-bin.tar.gz > $(PRODUCT)-$(VERSION)-bin.tar.gz.md5
+	tar czf $(PRODUCT)-$(VERSION)-src.tar.gz $(DISTSRC)
+	md5sum $(PRODUCT)-$(VERSION)-src.tar.gz > $(PRODUCT)-$(VERSION)-src.tar.gz.md5
 
 # automatic re-running of configure if the configure.in file has changed
 ${srcdir}/configure: configure.in 
