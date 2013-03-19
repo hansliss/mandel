@@ -1,0 +1,111 @@
+PRODUCT = @PRODUCT@
+VERSION = @VERSION@
+
+SHELL = /bin/sh
+top_srcdir = @top_srcdir@
+srcdir = @srcdir@
+
+.SUFFIXES:
+.SUFFIXES: .c .o
+
+CC = @CC@
+DEFINES = @DEFS@
+CFLAGS = -I. @CFLAGS@ $(DEFINES)
+LDFLAGS = @LDFLAGS@
+LIBS = @LIBS@ -lgmp -lm
+INSTALL = @INSTALL@
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+bindir = @bindir@
+mandir = @mandir@
+datarootdir = @datarootdir@
+
+DISTFILES =
+
+TARGET1=mandeldump
+SOURCES1=mandeldump.c
+OBJS1=mandeldump.o
+TARGET2=mandelmakepic
+SOURCES2=mandelmakepic.c
+OBJS2=mandelmakepic.o
+TARGET3=mandelmakeoutline
+SOURCES3=mandelmakeoutline.c
+OBJS3=mandelmakeoutline.o
+TARGET4=mandelanalyze
+SOURCES4=mandelanalyze.c
+OBJS4=mandelanalyze.o
+TARGET5=mandelxform
+SOURCES5=mandelxform.c
+OBJS5=mandelxform.o
+LIB_OBJS=
+
+OBJS=$(OBJS1) $(OBJS2) $(OBJS3) $(OBJS4) $(OBJS5) 
+SOURCES=$(SOURCES1) $(SOURCES2) $(SOURCES3) $(SOURCES4) $(SOURCES5)
+TARGETS=$(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4) $(TARGET5)
+
+all: $(TARGETS)
+
+install: all
+	$(top_srcdir)/mkinstalldirs $(bindir)
+	$(INSTALL) $(TARGETS) $(bindir)/
+
+$(TARGET1): $(OBJS1)
+	$(CC) $(CFLAGS) -o $(TARGET1) $(OBJS1) $(LDFLAGS) $(LIBS)
+
+$(TARGET2): $(OBJS2)
+	$(CC) $(CFLAGS) -o $(TARGET2) $(OBJS2) $(LDFLAGS) $(LIBS)
+
+$(TARGET3): $(OBJS3)
+	$(CC) $(CFLAGS) -o $(TARGET3) $(OBJS3) $(LDFLAGS) $(LIBS)
+
+$(TARGET4): $(OBJS4)
+	$(CC) $(CFLAGS) -o $(TARGET4) $(OBJS4) $(LDFLAGS) $(LIBS)
+
+$(TARGET5): $(OBJS5)
+	$(CC) $(CFLAGS) -o $(TARGET5) $(OBJS5) $(LDFLAGS) $(LIBS)
+
+$(OBJS1): $(SOURCES1)
+
+$(OBJS2): $(SOURCES2)
+
+$(OBJS3): $(SOURCES3)
+
+$(OBJS4): $(SOURCES4)
+
+$(OBJS5): $(SOURCES5)
+
+clean:
+	/bin/rm -f $(TARGETS) *.o core
+
+distclean: clean config-clean
+
+config-clean: confclean-recursive
+confclean-recursive: cfg-clean
+
+cfg-clean:
+	/bin/rm -f Makefile config.h config.status config.cache config.log
+
+mostlyclean: clean
+
+maintainer-clean: clean
+
+# automatic re-running of configure if the configure.in file has changed
+${srcdir}/configure: configure.in 
+	cd ${srcdir} && autoconf
+
+# autoheader might not change config.h.in, so touch a stamp file
+${srcdir}/config.h.in: stamp-h.in
+${srcdir}/stamp-h.in: configure.in 
+		cd ${srcdir} && autoheader
+		echo timestamp > ${srcdir}/stamp-h.in
+
+config.h: stamp-h
+stamp-h: config.h.in config.status
+	./config.status
+Makefile: Makefile.in config.status
+	./config.status
+config.status: configure
+	./config.status --recheck
+
+
+
