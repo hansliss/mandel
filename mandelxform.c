@@ -29,11 +29,12 @@ void epsilon(mpf_t rval) {
 
 void usage(char *progname) {
   fprintf(stderr, "Usage: %s -i <infile> -o <outfile> [-w <width>] [-h <height>]\n", progname);
-  fprintf(stderr, "\t[-x <center xcoord>] [-y <center ycoord>] [-z <zoom>]\n");
+  fprintf(stderr, "\t[-x <center xcoord>] [-y <center ycoord>] [-z <zoom>] [-m (mirror around y axis)]\n");
 }
 
 int main(int argc,char *argv[]) {
  int x=-1, y=-1, width=DEFAULTWIDTH, height=DEFAULTHEIGHT;
+ int mirrorx=0;
 
  mpf_t z, centx, centy, dx, dy, newdx, newdy, newz, tmpf;
  mpf_t mind;
@@ -68,7 +69,7 @@ int main(int argc,char *argv[]) {
 
  gmp_printf("epsilon=%.4FE\n", mind);
 
- while ((o=getopt(argc, argv, "w:h:x:y:z:i:o:")) != -1) {
+ while ((o=getopt(argc, argv, "w:h:x:y:z:i:o:m")) != -1) {
    switch (o) {
    case 'w': width=atoi(optarg); break;
    case 'h': height=atoi(optarg); break;
@@ -77,13 +78,14 @@ int main(int argc,char *argv[]) {
    case 'z': gmp_sscanf(optarg, "%Fg", z); break;
    case 'i': infilename=optarg; break;
    case 'o': outfilename=optarg; break;
+   case 'm': mirrorx=1; break;
    default: usage(argv[0]); return -1; break;
    }
  }
 
  if (!outfilename) outfilename=infilename;
 
- if (optind < argc || !infilename || !outfilename || (mpf_cmp_d(z, 1) == 0 && x == -1 && y == -1)) {
+ if (optind < argc || !infilename || !outfilename) {
    usage(argv[0]);
    return -1;
  }
@@ -114,7 +116,12 @@ int main(int argc,char *argv[]) {
  mpf_set(dy, dx);
  mpf_mul_ui(dy, dy, height);
  mpf_div_ui(dy, dy, width);
- 
+
+ if (mirrorx) {
+   gmp_printf("Mirroring x around y axis\n");
+   mpf_neg(centx, centx);
+ }
+
  gmp_printf("Input:\tsize is %dx%d pixels\n\tcenter is %.Fe, %.Fe\n\tdx=%.Fe, dy=%.Fe\n", 
 	width, height, centx, centy, dx, dy);
 

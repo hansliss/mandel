@@ -87,8 +87,8 @@ unsigned long f_mandel(float cx, float cy)
 #ifdef ANGLE
    ox=zx;oy=zy;
 #endif
-	zy=2*zx*zy - cy;
-	zx=zx2-zy2 - cx;
+	zy=2*zx*zy + cy;
+	zx=zx2-zy2 + cx;
 	zx2=zx*zx;
 	zy2=zy*zy;
 	i--;
@@ -132,8 +132,8 @@ unsigned long d_mandel(long double cx, long double cy)
 #ifdef ANGLE
    ox=zx;oy=zy;
 #endif
-	zy=2*zx*zy - cy;
-	zx=zx2-zy2 - cx;
+	zy=2*zx*zy + cy;
+	zx=zx2-zy2 + cx;
 	zx2=zx*zx;
 	zy2=zy*zy;
 	i--;
@@ -177,8 +177,8 @@ unsigned long ld_mandel(long double cx, long double cy)
 #ifdef ANGLE
    ox=zx;oy=zy;
 #endif
-	zy=2*zx*zy - cy;
-	zx=zx2-zy2 - cx;
+	zy=2*zx*zy + cy;
+	zx=zx2-zy2 + cx;
 	zx2=zx*zx;
 	zy2=zy*zy;
 	i--;
@@ -247,10 +247,10 @@ unsigned long gmp_mandel(mpf_t cx, mpf_t cy) {
 
    mpf_mul_ui(zy, zy, 2);
    mpf_mul(zy, zy, zx);
-   mpf_sub(zy, zy, cy);
+   mpf_add(zy, zy, cy);
 
    mpf_sub(zx, zx2, zy2);
-   mpf_sub(zx, zx, cx);
+   mpf_add(zx, zx, cx);
 
    mpf_mul(zx2, zx, zx);
    mpf_mul(zy2, zy, zy);

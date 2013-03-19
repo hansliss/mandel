@@ -222,8 +222,8 @@ int mandel(FLOAT cx, FLOAT cy, unsigned long maxiter) {
  unsigned long i=maxiter;
  FLOAT zx=cx,zy=cy,zx2=cx*cx,zy2=cy*cy;
  while((i>0)&&(zx2+zy2 < 4.0)) {
-	zy=2*zx*zy - cy;
-	zx=zx2-zy2 - cx;
+	zy=2*zx*zy + cy;
+	zx=zx2-zy2 + cx;
 	zx2=zx*zx;
 	zy2=zy*zy;
 	i--;
