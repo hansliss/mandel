@@ -1,5 +1,5 @@
 AC_INIT(mandeldump.c)
-PRODUCT=mandeldump
+PRODUCT=mandel
 VERSION=1.4-SNAPSHOT
 AC_CONFIG_HEADER(config.h)
 AC_PROG_CC
