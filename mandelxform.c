@@ -96,7 +96,7 @@ int main(int argc,char *argv[]) {
  }
 
  if (x == -1) x = width/2;
- if (y == -1) y = width/2;
+ if (y == -1) y = height/2;
 
  gmp_fscanf(infile,"%Fg\n",centx);
  gmp_fscanf(infile,"%Fg\n",centy);
@@ -113,6 +113,7 @@ int main(int argc,char *argv[]) {
    return -2;
  }
 
+ // dy = height * dx / width
  mpf_set(dy, dx);
  mpf_mul_ui(dy, dy, height);
  mpf_div_ui(dy, dy, width);
@@ -125,26 +126,31 @@ int main(int argc,char *argv[]) {
  gmp_printf("Input:\tsize is %dx%d pixels\n\tcenter is %.Fe, %.Fe\n\tdx=%.Fe, dy=%.Fe\n", 
 	width, height, centx, centy, dx, dy);
 
+ // chx = (x - width/2) / width = relative change of x
  mpf_set_si(chx, x - width/2);
  mpf_div_ui(chx, chx, width);
 
+ // chy = (y - height/2) / height = relative change of y
  mpf_set_si(chy, y - height/2);
  mpf_div_ui(chy, chy, height);
 
+ // chxp/chyp = above as a percentage
  mpf_set_ui(tmpf, 100);
  mpf_mul(chxp, chx, tmpf);
  mpf_mul(chyp, chy, tmpf);
 
  gmp_printf("Moving x %d pixels = %.Fg%%, y %d pixels = %.Fg%%\n", x-width/2, chxp, y-height/2, chyp);
 
- mpf_set(tmpf, dx);
- mpf_mul(tmpf, tmpf, chx);
+ // centx += dx * chx
+ mpf_mul(tmpf, dx, chx);
  mpf_add(centx, centx, tmpf);
 
- mpf_set(tmpf, dy);
- mpf_mul(tmpf, tmpf, chy);
+ // centy -= dy * chy, since our calculations assume a
+ // bottom-left origo but the screen coords use top-left
+ mpf_mul(tmpf, dy, chy);
  mpf_sub(centy, centy, tmpf);
 
+ // dx /= z
  mpf_set(newz, z);
  mpf_set(newdx, dx);
  mpf_div(newdx, newdx, z);

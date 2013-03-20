@@ -287,7 +287,7 @@ unsigned long gmp_mandel(mpf_t cx, mpf_t cy) {
 }
 
 void usage(char *progname) {
-  fprintf(stderr, "Usage: %s [-m <bailout limit>] [-d] <infile>\n", progname);
+  fprintf(stderr, "Usage: %s [-w <width>] [-h <height>] [-m <bailout limit>] [-d] <infile>\n", progname);
 }
 
 int main(int argc,char *argv[])
@@ -337,10 +337,16 @@ int main(int argc,char *argv[])
  ld_epsilon(&tmpld); mpf_set_d(mind_ld, tmpld);
  gmp_epsilon(mind_gmp);
 
- while ((o=getopt(argc, argv, "d:m:FDLG")) != -1) {
+ while ((o=getopt(argc, argv, "w:h:d:m:FDLG")) != -1) {
    switch (o) {
    case 'd':
      ofilename=optarg;
+     break;
+   case 'w':
+     width=atoi(optarg);
+     break;
+   case 'h':
+     height=atoi(optarg);
      break;
    case 'm':
      maxiter=atol(optarg);
@@ -393,7 +399,7 @@ int main(int argc,char *argv[])
  mpf_add(y1, centy, y1);
 
  mpf_sub(vx, x1, x0);
- mpf_div_ui(vx, vx, WIDTH);
+ mpf_div_ui(vx, vx, width);
 
  gmp_printf("Current center is %.Fg, %.Fg, dx=%.Fg\n",centx,centy,dx);
  gmp_printf("Corners are %.Fg, %.Fg  and  %.Fg, %.Fg\n",x0,y0,x1,y1);
