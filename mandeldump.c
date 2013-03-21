@@ -399,7 +399,7 @@ int main(int argc,char *argv[])
  mpf_add(y1, centy, y1);
 
  mpf_sub(vx, x1, x0);
- mpf_div_ui(vx, vx, width);
+ mpf_div_ui(vx, dx, width);
 
  gmp_printf("Current center is %.Fg, %.Fg, dx=%.Fg\n",centx,centy,dx);
  gmp_printf("Corners are %.Fg, %.Fg  and  %.Fg, %.Fg\n",x0,y0,x1,y1);

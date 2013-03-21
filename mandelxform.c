@@ -37,7 +37,7 @@ int main(int argc,char *argv[]) {
  int mirrorx=0;
 
  mpf_t z, centx, centy, dx, dy, newdx, newdy, newz, tmpf;
- mpf_t mind;
+ mpf_t mind, tmpx, tmpy, ocentx, ocenty;
 
  mpf_t chx, chy, chxp, chyp;
 
@@ -53,7 +53,9 @@ int main(int argc,char *argv[]) {
  mpf_set_default_prec(16384);
  mpf_init_set_d(z, 1);
  mpf_init(centx);
- mpf_init(centy);
+ mpf_init(centy); 
+ mpf_init(ocentx);
+ mpf_init(ocenty);
  mpf_init(dx);
  mpf_init(dy);
  mpf_init(newdx);
@@ -142,6 +144,9 @@ int main(int argc,char *argv[]) {
  mpf_mul(chyp, chy, tmpf);
 
  gmp_printf("Moving x %d pixels = %.Fg%%, y %d pixels = %.Fg%%\n", x-width/2, chxp, y-height/2, chyp);
+ 
+ mpf_set(ocentx, centx);
+ mpf_set(ocenty, centy);
 
  // centx += dx * chx
  mpf_mul(tmpf, dx, chx);
@@ -151,6 +156,18 @@ int main(int argc,char *argv[]) {
  // bottom-left origo but the screen coords use top-left
  mpf_mul(tmpf, dy, chy);
  mpf_sub(centy, centy, tmpf);
+
+ mpf_sub(ocentx, centx, ocentx);
+ mpf_div(ocentx, ocentx, dx);
+ mpf_init_set_ui(tmpx, width);
+ mpf_mul(ocentx, ocentx, tmpx);
+
+ mpf_sub(ocenty, ocenty, centy);
+ mpf_div(ocenty, ocenty, dy);
+ mpf_init_set_ui(tmpy, height);
+ mpf_mul(ocenty, ocenty, tmpy);
+
+ gmp_printf("New center is at (%.2Ff,%.2Ff) in original picture\n", ocentx, ocenty);
 
  // dx /= z
  mpf_set(newz, z);
