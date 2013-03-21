@@ -128,11 +128,13 @@ int main(int argc,char *argv[]) {
 
  // chx = (x - width/2) / width = relative change of x
  mpf_set_si(chx, x - width/2);
- mpf_div_ui(chx, chx, width);
+ mpf_set_ui(tmpf, width);
+ mpf_div(chx, chx, tmpf);
 
  // chy = (y - height/2) / height = relative change of y
  mpf_set_si(chy, y - height/2);
- mpf_div_ui(chy, chy, height);
+ mpf_set_ui(tmpf, height);
+ mpf_div(chy, chy, tmpf);
 
  // chxp/chyp = above as a percentage
  mpf_set_ui(tmpf, 100);
