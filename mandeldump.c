@@ -294,7 +294,7 @@ int main(int argc,char *argv[])
 {
   unsigned int x,y, width=WIDTH, height=HEIGHT, xstart=0, ystart=0;
  unsigned long wtmp, htmp;
- mpf_t x0,x1,y0,y1,centx,centy,dx,xval,yval,vx;
+ mpf_t x0,x1,y0,y1,centx,centy,dx,dy,xval,yval,vx;
 
  int minprec=0;
 
@@ -324,6 +324,7 @@ int main(int argc,char *argv[])
  mpf_init(y0);
  mpf_init(y1);
  mpf_init(dx);
+ mpf_init(dy);
  mpf_init(xval);
  mpf_init(yval);
  mpf_init(vx);
@@ -384,20 +385,36 @@ int main(int argc,char *argv[])
  gmp_fscanf(deffile,"%Fg\n",centy);
  gmp_fscanf(deffile,"%Fg\n",dx);
  fclose(deffile);
- 
+
+ if (width <= height) { 
+   // dy = height * dx / width;
+   mpf_set(dy, dx);
+   mpf_mul_ui(dy, dy, height);
+   mpf_div_ui(dy, dy, width);
+ } else {
+   // dy = dx_in
+   // dx = width * dy / height
+   mpf_set(dy, dx);
+   mpf_mul_ui(dx, dx, width);
+   mpf_div_ui(dx, dx, height);
+ }
+   
+ // x0 = centx - dx / 2
  mpf_div_ui(x0, dx, 2);
  mpf_sub(x0, centx, x0);
+
+ // x1 = centx + dx / 2
  mpf_div_ui(x1, dx, 2);
  mpf_add(x1, centx, x1);
-
- mpf_mul_ui(y0, dx, height);
- mpf_div_ui(y0, y0, 2*width);
+   
+ // y0 = centy - dy / 2
+ mpf_div_ui(y0, dy, 2);
  mpf_sub(y0, centy, y0);
 
- mpf_mul_ui(y1, dx, height);
- mpf_div_ui(y1, y1, 2*width);
+ // y1 = centy + dy / 2
+ mpf_div_ui(y1, dy, 2);
  mpf_add(y1, centy, y1);
-
+ 
  mpf_sub(vx, x1, x0);
  mpf_div_ui(vx, dx, width);
 
