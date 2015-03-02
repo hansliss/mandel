@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
       else
 	maxiter++;
     }
-  for (j=vmax; j>=0 && hist[j]<2; j--);
+  for (j=vmax; j>0 && hist[j]<2; j--);
   for (i=0; i<=j; i++)
     if (hist[i] > 0) break;
 
