@@ -11,6 +11,7 @@
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 
 #define WIDTH 20480
 #define HEIGHT 12800
@@ -19,6 +20,55 @@ unsigned long maxiter=MAXITER;
 #define BAILOUT 4.0
 
 typedef unsigned char byte;
+
+void xmlinit(FILE *xmlfile, char *name, time_t filetime, char *outfile, mpf_t centx, mpf_t centy, mpf_t dx,
+	     mpf_t cx0, mpf_t cy0, mpf_t cx1, mpf_t cy1,
+	     unsigned int width, unsigned int height, unsigned int maxiter) {
+  time_t tt_now = time(NULL);
+  struct tm *l_filetime=localtime(&filetime);
+  fprintf(xmlfile, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n");
+  fprintf(xmlfile, "<ml:mandellog xmlns:ml=\"http://mandel.liss.nu/mandellog\">\n");
+  fprintf(xmlfile, "  <ml:setup name=\"%s\">\n", name);
+  fprintf(xmlfile, "    <ml:definition ml:filedate=\"%04d-%02d-%02d %02d:%02d:%02d\">\n",
+	l_filetime->tm_year + 1900,
+	l_filetime->tm_mon + 1,
+	l_filetime->tm_mday,
+	l_filetime->tm_hour,
+	l_filetime->tm_min,
+	l_filetime->tm_sec);
+  gmp_fprintf(xmlfile, "      <ml:center_x>%.Fg</ml:center_x>\n", centx);
+  gmp_fprintf(xmlfile, "      <ml:center_y>%.Fg</ml:center_y>\n", centy);
+  gmp_fprintf(xmlfile, "      <ml:d_x>%.Fg</ml:d_x>\n", dx);
+  gmp_fprintf(xmlfile, "      <ml:corner_x0>%.Fg</ml:corner_x0>\n", cx0);
+  gmp_fprintf(xmlfile, "      <ml:corner_y0>%.Fg</ml:corner_y0>\n", cy0);
+  gmp_fprintf(xmlfile, "      <ml:corner_x1>%.Fg</ml:corner_x1>\n", cx1);
+  gmp_fprintf(xmlfile, "      <ml:corner_y1>%.Fg</ml:corner_y1>\n", cy1);
+  fprintf(xmlfile, "    </ml:definition>\n");
+  struct tm *now=localtime(&tt_now);
+  fprintf(xmlfile, "    <ml:render ml:filename=\"%s\" ml:rundate=\"%04d-%02d-%02d %02d:%02d:%02d\">\n",
+	  outfile,
+	  now->tm_year + 1900,
+	  now->tm_mon + 1,
+	  now->tm_mday,
+	  now->tm_hour,
+	  now->tm_min,
+	  now->tm_sec);
+  fprintf(xmlfile, "      <ml:width>%d</ml:width>\n", width);
+  fprintf(xmlfile, "      <ml:height>%d</ml:height>\n", height);
+  fprintf(xmlfile, "      <ml:maxiter>%d</ml:maxiter>\n", maxiter);
+  fprintf(xmlfile, "    </ml:render>\n");
+  fprintf(xmlfile, "  </ml:setup>\n");
+  fprintf(xmlfile, "  <ml:log>\n");
+}
+
+void xmllog(FILE *xmlfile, unsigned int rownumber, unsigned int rendertime) {
+  fprintf(xmlfile, "    <ml:rowtime ml:rowno=\"%d\">%d</ml:rowtime>\n", rownumber, rendertime);
+}
+
+void xmlfinish(FILE *xmlfile) {
+  fprintf(xmlfile, "  </ml:log>\n");
+  fprintf(xmlfile, "</ml:mandellog>\n");
+}
 
 void f_epsilon(float *rval) {
   float f_epsilon, testval, one, two;
@@ -287,7 +337,7 @@ unsigned long gmp_mandel(mpf_t cx, mpf_t cy) {
 }
 
 void usage(char *progname) {
-  fprintf(stderr, "Usage: %s [-w <width>] [-h <height>] [-m <bailout limit>] [-d] <infile>\n", progname);
+  fprintf(stderr, "Usage: %s [-w <width>] [-h <height>] [-m <bailout limit>] [-X <xml logfile>] -d <deffile> -o <dumpfile>\n", progname);
 }
 
 int main(int argc,char *argv[])
@@ -304,14 +354,21 @@ int main(int argc,char *argv[])
 
  mpf_t mind_f, mind_d, mind_ld, mind_gmp;
 
- FILE *deffile;
- char filename[80];
- unsigned int colornum;
- char *p;
- FILE *outfile=NULL;
- struct stat outfilestat;
+ struct timeval starttime, endtime;
 
- char *ofilename=NULL;
+ FILE *deffile;
+ unsigned int colornum;
+
+ FILE *dumpfile=NULL;
+ struct stat dumpfilestat;
+
+ FILE *xmlfile=NULL;
+
+ char *deffilename=NULL;
+ char *dumpfilename=NULL;
+
+ struct stat filestat;
+
  int o;
 
  mpf_set_default_prec(16384);
@@ -338,10 +395,13 @@ int main(int argc,char *argv[])
  ld_epsilon(&tmpld); mpf_set_d(mind_ld, tmpld);
  gmp_epsilon(mind_gmp);
 
- while ((o=getopt(argc, argv, "w:h:d:m:FDLG")) != -1) {
+ while ((o=getopt(argc, argv, "w:h:d:o:m:FDLGX:")) != -1) {
    switch (o) {
    case 'd':
-     ofilename=optarg;
+     deffilename=optarg;
+     break;
+   case 'o':
+     dumpfilename=optarg;
      break;
    case 'w':
      width=atoi(optarg);
@@ -356,34 +416,32 @@ int main(int argc,char *argv[])
    case 'D': minprec=1; break;
    case 'L': minprec=2; break;
    case 'G': minprec=3; break;
+   case 'X': if (!(xmlfile=fopen(optarg, "w"))) { perror(optarg); return -2; } break;
    default:
      usage(argv[0]);
      return -1;
    }
  }
 
- if (!ofilename && (optind < argc)) {
-   ofilename=argv[optind++];
- }
-
- if (!ofilename || (optind < argc)) {
+ if (!deffilename || !dumpfilename) {
    usage(argv[0]);
    return -1;
  }
 
- strcpy(filename,ofilename);
- if ((p=(char *)strrchr(filename,'.'))!=NULL)
-   *p='\0';
- strcat(filename,".def");
- if (!(deffile=fopen(filename,"r")))
+ if (!(deffile=fopen(deffilename,"r")))
    {
-     fprintf(stderr,"Failed to open definition file %s\n",filename);
+     fprintf(stderr,"Failed to open definition file %s\n",deffilename);
      return -1;
    }
 
  gmp_fscanf(deffile,"%Fg\n",centx);
  gmp_fscanf(deffile,"%Fg\n",centy);
  gmp_fscanf(deffile,"%Fg\n",dx);
+
+ if (xmlfile) {
+   fstat(fileno(deffile), &filestat);
+ }
+
  fclose(deffile);
 
  if (width <= height) { 
@@ -423,51 +481,49 @@ int main(int argc,char *argv[])
  gmp_printf("\npixel=%Fg - epsilons are: float=%Fg, double=%Fg, long double=%Fg, gmp=%Fg\n",
 	    vx, mind_f, mind_d, mind_ld, mind_gmp);
 
- // Check the output file and open it
- strcpy(filename,ofilename);
-
- if ((p=(char *)strrchr(filename,'.'))!=NULL)
-   *p='\0';
- strcat(filename,".mdump");
+ if (xmlfile) {
+   xmlinit(xmlfile, deffilename, filestat.st_mtimespec.tv_sec, dumpfilename, centx, centy, dx, x0, y0, x1, y1, width, height, maxiter);
+ }
 
  // Try to determine if we were doing a dump already to this file, and if the width and height
  // for that dump were the same as this one. If so, continue where we left off.
  xstart=0;
  ystart=0;
- outfile=NULL;
- if (!stat(filename, &outfilestat)) {
-   outfile=fopen(filename, "rb");
-   if (fread(&wtmp, sizeof(wtmp), 1, outfile) == 1 &&
-       fread(&htmp, sizeof(htmp), 1, outfile) == 1 &&
+ dumpfile=NULL;
+ if (!stat(dumpfilename, &dumpfilestat)) {
+   dumpfile=fopen(dumpfilename, "rb");
+   if (fread(&wtmp, sizeof(wtmp), 1, dumpfile) == 1 &&
+       fread(&htmp, sizeof(htmp), 1, dumpfile) == 1 &&
        ntohl(wtmp) == width &&
        ntohl(htmp) == height) {
-     long alreadydone = (outfilestat.st_size - (sizeof(htmp) + sizeof(wtmp))) / sizeof(colornum);
+     long alreadydone = (dumpfilestat.st_size - (sizeof(htmp) + sizeof(wtmp))) / sizeof(colornum);
      xstart = alreadydone % width;
      ystart = alreadydone / width;
      fprintf(stderr, "Continuing at (%d,%d)\n", xstart, ystart);
-     fclose(outfile);
-     outfile=fopen(filename, "ab");     
+     fclose(dumpfile);
+     dumpfile=fopen(dumpfilename, "ab");     
    } else {
-     fclose(outfile);
-     outfile=NULL;
+     fclose(dumpfile);
+     dumpfile=NULL;
    }
  }
 
- if (outfile == NULL) {
-   outfile=fopen(filename, "wb");
-   if (!outfile) {
-     perror(filename);
+ if (dumpfile == NULL) {
+   dumpfile=fopen(dumpfilename, "wb");
+   if (!dumpfile) {
+     perror(dumpfilename);
      return -1;
    }
 
    wtmp=htonl(width);
    htmp=htonl(height);
-   fwrite(&wtmp, sizeof(wtmp), 1, outfile);
-   fwrite(&htmp, sizeof(htmp), 1, outfile);
+   fwrite(&wtmp, sizeof(wtmp), 1, dumpfile);
+   fwrite(&htmp, sizeof(htmp), 1, dumpfile);
  }
 
  if (minprec <= 0 && mpf_cmp(vx, mind_f) > 0) {
    float x0_f, y0_f, x1_f, y1_f, xval_f, yval_f;
+   unsigned int row=0;
    printf("(using \"float\" arithmetic)\n");
    x0_f=mpf_get_d(x0);
    y0_f=mpf_get_d(y0);
@@ -475,18 +531,26 @@ int main(int argc,char *argv[])
    y1_f=mpf_get_d(y1);
    for (y=ystart;y<height;y++) {   
      fprintf(stderr,"  Line: %d\r",y);
+     if (xmlfile) {
+       gettimeofday(&starttime, NULL);
+     }
      yval_f = y0_f + (y1_f - y0_f)*(float)(height-y)/(float)height;
      for (x=xstart;x<width;x++) {
        xval_f = x0_f + (x1_f - x0_f)*(float)x/(float)width;
        colornum=f_mandel(xval_f,yval_f);
        colornum=htonl(colornum);
-       fwrite(&colornum, sizeof(colornum), 1, outfile);
+       fwrite(&colornum, sizeof(colornum), 1, dumpfile);
      }
-     fflush(outfile);
+     if (xmlfile) {
+       gettimeofday(&endtime, NULL);
+       xmllog(xmlfile, row++, (endtime.tv_sec - starttime.tv_sec) * 1000 + (endtime.tv_usec - starttime.tv_usec) / 1000);
+     }
+     fflush(dumpfile);
      xstart=0;
    }
  } else if (minprec <= 1 && mpf_cmp(vx, mind_d) > 0) {
    double x0_d, y0_d, x1_d, y1_d, xval_d, yval_d;
+   unsigned int row=0;
    printf("(using \"double\" arithmetic)\n");
    x0_d=mpf_get_d(x0);
    y0_d=mpf_get_d(y0);
@@ -494,18 +558,26 @@ int main(int argc,char *argv[])
    y1_d=mpf_get_d(y1);
    for (y=ystart;y<height;y++) {   
      fprintf(stderr,"  Line: %d\r",y);
+     if (xmlfile) {
+       gettimeofday(&starttime, NULL);
+     }
      yval_d = y0_d + (y1_d - y0_d)*(double)(height-y)/(double)height;
      for (x=xstart;x<width;x++) {
        xval_d = x0_d + (x1_d - x0_d)*(double)x/(double)width;
        colornum=d_mandel(xval_d,yval_d);
        colornum=htonl(colornum);
-       fwrite(&colornum, sizeof(colornum), 1, outfile);
+       fwrite(&colornum, sizeof(colornum), 1, dumpfile);
      }
-     fflush(outfile);
+     if (xmlfile) {
+       gettimeofday(&endtime, NULL);
+       xmllog(xmlfile, row++, (endtime.tv_sec - starttime.tv_sec) * 1000 + (endtime.tv_usec - starttime.tv_usec) / 1000);
+     }
+     fflush(dumpfile);
      xstart=0;
    }
  } else if (minprec <= 2 && mpf_cmp(vx, mind_ld) > 0) {
    long double x0_ld, y0_ld, x1_ld, y1_ld, xval_ld, yval_ld;
+   unsigned int row=0;
    printf("(using \"long double\" arithmetic)\n");
    x0_ld=mpf_get_d(x0);
    y0_ld=mpf_get_d(y0);
@@ -513,20 +585,31 @@ int main(int argc,char *argv[])
    y1_ld=mpf_get_d(y1);
    for (y=ystart;y<height;y++) {   
      fprintf(stderr,"  Line: %d\r",y);
+     if (xmlfile) {
+       gettimeofday(&starttime, NULL);
+     }
      yval_ld = y0_ld + (y1_ld - y0_ld)*(long double)(height-y)/(long double)height;
      for (x=xstart;x<width;x++) {
        xval_ld = x0_ld + (x1_ld - x0_ld)*(long double)x/(long double)width;
        colornum=ld_mandel(xval_ld,yval_ld);
        colornum=htonl(colornum);
-       fwrite(&colornum, sizeof(colornum), 1, outfile);
+       fwrite(&colornum, sizeof(colornum), 1, dumpfile);
      }
-     fflush(outfile);
+     if (xmlfile) {
+       gettimeofday(&endtime, NULL);
+       xmllog(xmlfile, row++, (endtime.tv_sec - starttime.tv_sec) * 1000 + (endtime.tv_usec - starttime.tv_usec) / 1000);
+     }
+     fflush(dumpfile);
      xstart=0;
    }
  } else if (minprec <= 3 && mpf_cmp(vx, mind_gmp) > 0) {
+   unsigned int row=0;
    printf("(using \"gmp\" multi-precision arithmetic)\n");
    for (y=ystart;y<height;y++) {   
      fprintf(stderr,"  Line: %d\r",y);
+     if (xmlfile) {
+       gettimeofday(&starttime, NULL);
+     }
      mpf_sub(yval, y1, y0);
      mpf_mul_ui(yval, yval, height-y);
      mpf_div_ui(yval, yval, height);
@@ -539,12 +622,20 @@ int main(int argc,char *argv[])
        mpf_add(xval, xval, x0);
        colornum=gmp_mandel(xval,yval);
        colornum=htonl(colornum);
-       fwrite(&colornum, sizeof(colornum), 1, outfile);
+       fwrite(&colornum, sizeof(colornum), 1, dumpfile);
      }
-     fflush(outfile);
+     if (xmlfile) {
+       gettimeofday(&endtime, NULL);
+       xmllog(xmlfile, row++, (endtime.tv_sec - starttime.tv_sec) * 1000 + (endtime.tv_usec - starttime.tv_usec) / 1000);
+     }
+     fflush(dumpfile);
      xstart=0;
    }
  } else fprintf(stderr, "pixel width is too small!\n");
- fclose(outfile);
+ fclose(dumpfile);
+ if (xmlfile) {
+   xmlfinish(xmlfile);
+   fclose(xmlfile);
+ }
  return 0;
 }
