@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <time.h>
 
 #define WIDTH 20480
 #define HEIGHT 12800
@@ -482,7 +483,7 @@ int main(int argc,char *argv[])
 	    vx, mind_f, mind_d, mind_ld, mind_gmp);
 
  if (xmlfile) {
-   xmlinit(xmlfile, deffilename, filestat.st_mtimespec.tv_sec, dumpfilename, centx, centy, dx, x0, y0, x1, y1, width, height, maxiter);
+   xmlinit(xmlfile, deffilename, filestat.st_mtime, dumpfilename, centx, centy, dx, x0, y0, x1, y1, width, height, maxiter);
  }
 
  // Try to determine if we were doing a dump already to this file, and if the width and height

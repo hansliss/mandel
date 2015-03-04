@@ -179,7 +179,7 @@ int main(int argc,char *argv[]) {
   mpf_set(tmpf, newdy);
   mpf_div_ui(tmpf, tmpf, height);
 
- gmp_printf("New center is at (%.2Ff,%.i2Ff) in the original picture\n", ocentx, ocenty);
+  gmp_printf("New center is at (%.2Ff,%.i2Ff) in the original picture\n", centx, centy);
 
   if (mpf_cmp(newz, z) != 0) gmp_printf("Zoom level changed from %.Fg to the maximum (at %dx%d pixels) of %.Fg\n", z, width, height, newz);
   mpf_set(dx, newdx);
