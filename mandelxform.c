@@ -152,12 +152,19 @@ int main(int argc,char *argv[]) {
   mpf_mul(tmpf, dy, chy);
   mpf_sub(centy, centy, tmpf);
 
-  // dx /= z
-  mpf_set(newz, z);
-  mpf_set(newdx, dx);
-  mpf_div(newdx, newdx, z);
-  mpf_set(tmpf,newdx);
-  mpf_div_ui(tmpf, tmpf, width);
+ long double ldcentx=(long double)(x-width/2);
+ ldcentx *= (long double)mpf_get_d(dx);
+ ldcentx /= (long double)width;
+ ldcentx += (long double)mpf_get_d(centx);
+ long double ldcenty=(long double)(y-height/2);
+ ldcenty *= (long double)mpf_get_d(dy);
+ ldcenty /= (long double)height;
+ ldcenty -= (long double)mpf_get_d(centy);
+
+ // centy -= dy * chy, since our calculations assume a
+ // bottom-left origo but the screen coords use top-left
+ mpf_mul(tmpf, dy, chy);
+ mpf_sub(centy, centy, tmpf);
 
   if (mpf_cmp(tmpf, mind) < 0) {
     mpf_set(newdx, mind);
@@ -172,14 +179,7 @@ int main(int argc,char *argv[]) {
   mpf_set(tmpf, newdy);
   mpf_div_ui(tmpf, tmpf, height);
 
-  if (mpf_cmp(tmpf, mind) < 0) {
-    mpf_set(newdy, mind);
-    mpf_mul_ui(newdy, newdy, height);
-    mpf_set(newz, dy);
-    mpf_div(newz, newz, newdy);
-    mpf_set(newdx, dx);
-    mpf_div(newdx, newdx, newz);
-  }
+ gmp_printf("New center is at (%.2Ff,%.i2Ff) in the original picture\n", ocentx, ocenty);
 
   if (mpf_cmp(newz, z) != 0) gmp_printf("Zoom level changed from %.Fg to the maximum (at %dx%d pixels) of %.Fg\n", z, width, height, newz);
   mpf_set(dx, newdx);
@@ -194,5 +194,27 @@ int main(int argc,char *argv[]) {
   gmp_fprintf(outfile, "%.Fe\n", dx);
   fclose(outfile);
 
-  return 0;
+ if (mpf_cmp(tmpf, mind) < 0) {
+   mpf_set(newdy, mind);
+   mpf_mul_ui(newdy, newdy, height);
+   mpf_set(newz, dy);
+   mpf_div(newz, newz, newdy);
+   mpf_set(newdx, dx);
+   mpf_div(newdx, newdx, newz);
+ }
+
+ if (mpf_cmp(newz, z) != 0) gmp_printf("Zoom level changed from %.Fg to the maximum (at %dx%d pixels) of %.Fg\n", z, width, height, newz);
+ mpf_set(dx, newdx);
+ mpf_set(dy, newdy);
+ mpf_set(z, newz);
+
+ gmp_printf("Output:\tcenter is %.Fg, %.Fg\n\tdx=%.Fg, dy=%.Fg\n",
+	centx, centy, dx, dy);
+
+ gmp_fprintf(outfile, "%.99Lg\n", ldcentx);
+ gmp_fprintf(outfile, "%.99Lg\n", ldcenty);
+ gmp_fprintf(outfile, "%.Fe\n", dx);
+ fclose(outfile);
+
+ return 0;
 }
