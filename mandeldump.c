@@ -64,6 +64,7 @@ void xmlinit(FILE *xmlfile, char *name, time_t filetime, char *outfile, mpf_t ce
 
 void xmllog(FILE *xmlfile, unsigned int rownumber, unsigned int rendertime) {
   fprintf(xmlfile, "    <ml:rowtime ml:rowno=\"%d\">%d</ml:rowtime>\n", rownumber, rendertime);
+  fflush(xmlfile);
 }
 
 void xmlfinish(FILE *xmlfile) {
