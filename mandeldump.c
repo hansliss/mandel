@@ -339,7 +339,7 @@ unsigned long gmp_mandel(mpf_t cx, mpf_t cy) {
 }
 
 void usage(char *progname) {
-  fprintf(stderr, "Usage: %s [-w <width>] [-h <height>] [-m <bailout limit>] [-X <xml logfile>] -d <deffile> -o <dumpfile>\n", progname);
+  fprintf(stderr, "Usage: %s [-w <width>] [-h <height>] [-m <bailout limit>] [-X <xml logfile>] [-g (use gmp arithmetic)] -d <deffile> -o <dumpfile>\n", progname);
 }
 
 int main(int argc,char *argv[])
@@ -347,6 +347,8 @@ int main(int argc,char *argv[])
   unsigned int x,y, width=WIDTH, height=HEIGHT, xstart=0, ystart=0;
  unsigned long wtmp, htmp;
  mpf_t x0,x1,y0,y1,centx,centy,dx,dy,xval,yval,vx;
+
+ int usegmp=0;
 
  int minprec=0;
 
@@ -397,7 +399,7 @@ int main(int argc,char *argv[])
  ld_epsilon(&tmpld); mpf_set_d(mind_ld, tmpld);
  gmp_epsilon(mind_gmp);
 
- while ((o=getopt(argc, argv, "w:h:d:o:m:FDLGX:")) != -1) {
+ while ((o=getopt(argc, argv, "w:h:d:o:m:FDLGX:g")) != -1) {
    switch (o) {
    case 'd':
      deffilename=optarg;
@@ -418,6 +420,7 @@ int main(int argc,char *argv[])
    case 'D': minprec=1; break;
    case 'L': minprec=2; break;
    case 'G': minprec=3; break;
+   case 'g': usegmp=1;
    case 'X': if (!(xmlfile=fopen(optarg, "w"))) { perror(optarg); return -2; } break;
    default:
      usage(argv[0]);
@@ -604,7 +607,7 @@ int main(int argc,char *argv[])
      fflush(dumpfile);
      xstart=0;
    }
- } else if (minprec <= 3 && mpf_cmp(vx, mind_gmp) > 0) {
+ } else if (usegmp && minprec <= 3 && mpf_cmp(vx, mind_gmp) > 0) {
    unsigned int row=0;
    printf("(using \"gmp\" multi-precision arithmetic)\n");
    for (y=ystart;y<height;y++) {   

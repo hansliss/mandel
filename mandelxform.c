@@ -36,10 +36,10 @@ int main(int argc,char *argv[]) {
   int x=-1, y=-1, width=DEFAULTWIDTH, height=DEFAULTHEIGHT;
   int mirrorx=0;
 
-  mpf_t z, centx, centy, dx, dy, newdx, newdy, newz, tmpf;
-  mpf_t mind;
+  mpf_t z, centx, centy, dx, dy, newdx, newz, tmpf, tmpf2;
+  mpf_t mind, zoom_steps_to_mind;
 
-  mpf_t chx, chy, chxp, chyp;
+  mpf_t chx, chy;
 
   char *infilename=NULL, *outfilename=NULL;
   FILE *infile=NULL, *outfile=NULL;
@@ -57,14 +57,13 @@ int main(int argc,char *argv[]) {
   mpf_init(dx);
   mpf_init(dy);
   mpf_init(newdx);
-  mpf_init(newdy);
   mpf_init(newz);
   mpf_init(tmpf);
+  mpf_init(tmpf2);
   mpf_init(chx);
   mpf_init(chy);
-  mpf_init(chxp);
-  mpf_init(chyp);
   mpf_init(mind);
+  mpf_init(zoom_steps_to_mind);
   epsilon(mind);
 
   gmp_printf("epsilon=%.4FE\n", mind);
@@ -118,6 +117,16 @@ int main(int argc,char *argv[]) {
   mpf_mul_ui(dy, dy, height);
   mpf_div_ui(dy, dy, width);
 
+  if (width > height) {
+    mpf_set_ui(zoom_steps_to_mind, height);
+    mpf_div(zoom_steps_to_mind, zoom_steps_to_mind, dy);
+    mpf_div(zoom_steps_to_mind, zoom_steps_to_mind, mind);
+  } else {
+    mpf_set_ui(zoom_steps_to_mind, width);
+    mpf_div(zoom_steps_to_mind, zoom_steps_to_mind, dx);
+    mpf_div(zoom_steps_to_mind, zoom_steps_to_mind, mind);
+  }
+
   if (mirrorx) {
     gmp_printf("Mirroring x around y axis\n");
     mpf_neg(centx, centx);
@@ -126,30 +135,25 @@ int main(int argc,char *argv[]) {
   gmp_printf("Input:\tsize is %dx%d pixels\n\tcenter is %.Fe, %.Fe\n\tdx=%.Fe, dy=%.Fe\n", 
 	     width, height, centx, centy, dx, dy);
 
-  // chx = (width/2 - x) / width = relative change of x
-  mpf_set_si(chx, width/2 - x);
-  mpf_set_ui(tmpf, width);
-  mpf_div(chx, chx, tmpf);
+  // chx = (x - width/2) = change of x in pixels
+  mpf_set_si(chx, x - width/2);
 
-  // chy = (y - height/2) / height = relative change of y
+  // chy = (y - height/2) = change of y in pixels
   mpf_set_si(chy, y - height/2);
-  mpf_set_ui(tmpf, height);
-  mpf_div(chy, chy, tmpf);
 
-  // chxp/chyp = above as a percentage
-  mpf_set_ui(tmpf, 100);
-  mpf_mul(chxp, chx, tmpf);
-  mpf_mul(chyp, chy, tmpf);
-
-  gmp_printf("Moving x %d pixels = %.Fg%%, y %d pixels = %.Fg%%\n", x-width/2, chxp, y-height/2, chyp);
+  gmp_printf("Moving x %d pixels, y %d pixels\n", x-width/2, y-height/2);
  
   // centx += dx * chx
   mpf_mul(tmpf, dx, chx);
+  mpf_set_ui(tmpf2, width);
+  mpf_div(tmpf, tmpf, tmpf2);
   mpf_add(centx, centx, tmpf);
 
   // centy -= dy * chy, since our calculations assume a
   // bottom-left origo but the screen coords use top-left
   mpf_mul(tmpf, dy, chy);
+  mpf_set_ui(tmpf2, height);
+  mpf_div(tmpf, tmpf, tmpf2);
   mpf_sub(centy, centy, tmpf);
 
   long double ldcentx=(long double)(x-width/2);
@@ -161,37 +165,18 @@ int main(int argc,char *argv[]) {
   ldcenty /= (long double)height;
   ldcenty -= (long double)mpf_get_d(centy);
 
-  mpf_set(newz,z);
-  mpf_set(newdx, dx);
-  mpf_set(newdy, dy);
-
-  if (mpf_cmp(tmpf, mind) < 0) {
-    mpf_set(newdx, mind);
-    mpf_mul_ui(newdx, newdx, width);
-    mpf_set(newz, dx);
-    mpf_div(newz, newz, newdx);
-  }
-
-  mpf_set(newdy, newdx);
-  mpf_mul_ui(newdy, newdy, height);
-  mpf_div_ui(newdy, newdy, width);
-  mpf_set(tmpf, newdy);
-  mpf_div_ui(tmpf, tmpf, height);
-
-  if (mpf_cmp(tmpf, mind) < 0) {
-    mpf_set(newdy, mind);
-    mpf_mul_ui(newdy, newdy, height);
-    mpf_set(newz, dy);
-    mpf_div(newz, newz, newdy);
-    mpf_set(newdx, dx);
-    mpf_div(newdx, newdx, newz);
-  }
-
   gmp_printf("New center is at (%.2Ff,%.2Ff) in the original picture\n", centx, centy);
 
-  if (mpf_cmp(newz, z) != 0) gmp_printf("Zoom level changed from %.Fg to the maximum (at %dx%d pixels) of %.Fg\n", z, width, height, newz);
+  mpf_set(newz,z);
+  if (mpf_cmp(zoom_steps_to_mind, newz) < 0) {
+    gmp_printf("Adjusting zoom level to the maximum of %.20Fg\n", newz);
+    mpf_set(newz, zoom_steps_to_mind);
+  }
+
+  mpf_set(newdx, dx);
+  mpf_div(newdx, newdx, newz);
+
   mpf_set(dx, newdx);
-  mpf_set(dy, newdy);
   mpf_set(z, newz);
 
   gmp_printf("Output:\tcenter is %.Fg, %.Fg\n\tdx=%.Fg, dy=%.Fg\n",
