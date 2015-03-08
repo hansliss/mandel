@@ -296,7 +296,7 @@ int main(int argc, char *argv[])
 	sprintf(tmpbuf1, "%s %s", __FILE__, __DATE__);
 	sprintf(tmpbuf2, "%s", infilename);
 
-	if (!(th = TargaOpen(currentoutfilename, width, height, tmpbuf1, tmpbuf2))) return -2;
+	if (!(th = TargaOpen(currentoutfilename, width, height, tmpbuf1, tmpbuf2, 1))) return -2;
 
 	sprintf(tmpbuf1, "-H%Lg -h%Lg -S%Lg -s%Lg -V%Lg -v%Lg -I %c%c%c -L %c%c%c -P%c%c%c\n",
 		hc, hk, sc, sk, vc, vk,

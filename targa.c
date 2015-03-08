@@ -31,7 +31,7 @@ void TargaFixHeader(TargaHeader *h) {
 }
 
 void TargaFixFooter(TargaFooter *f) {
-  f->ExtensionAreaOffset =      swapLong(htonl(f->ExtensionAreaOffset));
+  f->ExtensionAreaOffset = swapLong(htonl(f->ExtensionAreaOffset));
   f->DeveloperDirectoryOffset = swapLong(htonl(f->DeveloperDirectoryOffset));
 }
 
@@ -57,16 +57,20 @@ void TargaFixExtensionArea(TargaExtensionArea *e) {
   e->ScanLineTable = swapLong(htonl(e->ScanLineTable));
 }
 
-TargaHandle TargaOpen(char *filename, int width, int height, char *author, char *jobname) {
+TargaHandle TargaOpen(char *filename, int width, int height, char *author, char *jobname, int writing) {
   TargaHeader fileheader;
+  TargaFooter filefooter;
+  TargaExtensionArea fileextension;
   int restart=1;
+  static char *initial_mode="r+";
+  if (!writing) initial_mode="r";
   TargaHandle newhandle=(TargaHandle)malloc(sizeof(struct TargaHandle_s));
   if (!newhandle) return NULL;
   memset(newhandle, 0, sizeof(struct TargaHandle_s));
   newhandle->width=width;
   newhandle->height=height;
-  
-  if (((newhandle->file) = fopen(filename, "r+")) != NULL) {
+
+  if (((newhandle->file) = fopen(filename, initial_mode)) != NULL) {
     if (fread(&fileheader, sizeof(fileheader), 1, newhandle->file) == 1) {
       TargaFixHeader(&fileheader);
       if (fileheader.ImgWidth == width && fileheader.ImgHeight == height) {
@@ -78,37 +82,59 @@ TargaHandle TargaOpen(char *filename, int width, int height, char *author, char 
 	}
       }
     }
-    if (restart) {
-      fprintf(stderr, "Truncating %s\n", filename);
-      fclose(newhandle->file);
-      newhandle->currentsize = 0;
-      newhandle->file=NULL;
+    if (writing) {
+      if (restart) {
+	fprintf(stderr, "Truncating %s\n", filename);
+	fclose(newhandle->file);
+	newhandle->currentsize = 0;
+	newhandle->file=NULL;
+      } else {
+	fprintf(stderr, "%s contains %lu pixels. Appending - ignoring new creator and job name\n", filename, newhandle->currentsize);
+	fseek(newhandle->file,
+	      (long)((newhandle->currentsize * 3) + sizeof(TargaHeader)),
+	      SEEK_SET);
+      }
+      if (!(newhandle->file) && ((newhandle->file) = fopen(filename, "w")) == NULL) {
+	perror(filename);
+	free(newhandle);
+	return NULL;
+      }
+      memset(&fileheader, 0, 18);
+      if (jobname) fileheader.IDFieldSize=strlen(jobname)+1;
+      fileheader.ImageType = 2;
+      fileheader.ImgWidth = width;
+      fileheader.ImgHeight = height;
+      fileheader.ImgColourDepth = 24;
+      fileheader.ImgDescription = 0x20;
+      TargaFixHeader(&fileheader);
+      fwrite(&fileheader, sizeof(fileheader), 1, newhandle->file);
+      if (jobname) fwrite(jobname, 1, strlen(jobname)+1, newhandle->file);
+      if (author) newhandle->author=strdup(author);
+      if (jobname) newhandle->jobname=strdup(jobname);
     } else {
-      fprintf(stderr, "%s contains %lu pixels. Appending - ignoring new creator and job name\n", filename, newhandle->currentsize);
-      fseek(newhandle->file,
-	    (long)((newhandle->currentsize * 3) + sizeof(TargaHeader)),
-	    SEEK_SET);
+      newhandle->width = fileheader.ImgWidth;
+      newhandle->height = fileheader.ImgHeight;
+      fseek(newhandle->file, -sizeof(TargaFooter), SEEK_END);
+      if (fread(&filefooter, sizeof(TargaFooter), 1, newhandle->file) != 1) {
+	fprintf(stderr, "Failed to read footer\n");
+	return NULL;
+      }
+      TargaFixFooter(&filefooter);
+      fseek(newhandle->file, filefooter.ExtensionAreaOffset, SEEK_SET);
+      if (fread(&fileextension, sizeof(fileextension), 1, newhandle->file) != 1) {
+	fprintf(stderr, "Failed to read extension area\n");
+	return NULL;
+      }
+      TargaFixExtensionArea(&fileextension);
+      newhandle->author = strdup(fileextension.AuthorName);
+      newhandle->jobname = strdup(fileextension.JobName);
+      newhandle->comment1 = strdup(fileextension.AuthorComments1);
+      newhandle->comment2 = strdup(fileextension.AuthorComments2);
+      newhandle->comment3 = strdup(fileextension.AuthorComments3);
+      newhandle->comment4 = strdup(fileextension.AuthorComments4);
     }
   }
-  
-  if (!(newhandle->file) && ((newhandle->file) = fopen(filename, "w")) == NULL) {
-    perror(filename);
-    free(newhandle);
-    return NULL;
-  }
-  
-  memset(&fileheader, 0, 18);
-  if (jobname) fileheader.IDFieldSize=strlen(jobname)+1;
-  fileheader.ImageType = 2;
-  fileheader.ImgWidth = width;
-  fileheader.ImgHeight = height;
-  fileheader.ImgColourDepth = 24;
-  fileheader.ImgDescription = 0x20;
-  TargaFixHeader(&fileheader);
-  fwrite(&fileheader, sizeof(fileheader), 1, newhandle->file);
-  if (jobname) fwrite(jobname, 1, strlen(jobname)+1, newhandle->file);
-  if (author) newhandle->author=strdup(author);
-  if (jobname) newhandle->jobname=strdup(jobname);
+
   return newhandle;
 }
 

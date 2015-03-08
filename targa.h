@@ -83,7 +83,7 @@ typedef struct TargaExtensionArea_s {
 void TargaFixHeader(TargaHeader *h);
 void TargaFixFooter(TargaFooter *f);
 void TargaFixExtensionArea(TargaExtensionArea *e);
-TargaHandle TargaOpen(char *filename, int width, int height, char *author, char *jobname);
+TargaHandle TargaOpen(char *filename, int width, int height, char *author, char *jobname, int writing);
 int TargaSeek(TargaHandle h, unsigned long pos);
 void TargaWrite(TargaHandle h, unsigned char r,unsigned char g,unsigned char  b);
 void TargaAddComment(TargaHandle h, char *comment);

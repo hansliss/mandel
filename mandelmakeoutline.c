@@ -115,7 +115,7 @@ int main(int argc, char *argv[])
   sprintf(tmpbuf1, "%s %s", __FILE__, __DATE__);
   sprintf(tmpbuf2, "%s", infilename);
 
-  if (!(th = TargaOpen(outfilename, width, height, tmpbuf1, tmpbuf2))) return -2;
+  if (!(th = TargaOpen(outfilename, width, height, tmpbuf1, tmpbuf2, 1))) return -2;
 
   sprintf(tmpbuf1, "Made by mandelmakeoutline\n");
 

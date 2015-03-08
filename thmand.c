@@ -357,7 +357,7 @@ int main(int argc,char *argv[]) {
   sprintf(tmpbuf1, "%s %s", __FILE__, __DATE__);
   sprintf(tmpbuf2, "%s", deffilename);
 
-  tfile=TargaOpen(filename, WIDTH, HEIGHT, tmpbuf1, tmpbuf2); // Initialize file
+  tfile=TargaOpen(filename, WIDTH, HEIGHT, tmpbuf1, tmpbuf2, 1); // Initialize file
   fprintf(stderr, "Done. Starting...\n");
 
   while (nthreads > 0 || workstack || result) {
