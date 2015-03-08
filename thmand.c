@@ -10,6 +10,8 @@
 #include <signal.h>
 #include <sys/resource.h>
 
+#include "targa.h"
+
 FILE *logfile;
 
 #define FLOAT long double
@@ -36,10 +38,6 @@ FILE *logfile;
 #endif
 unsigned long maxiter=MAXITER;
 
-int TargaOpen(char *filename, int x, int y, int init);
-void TargaWrite(int file, int width, int height, int x, int y,
-		unsigned char r,unsigned char g,unsigned char  b);
-void TargaClose(int file);
 void *run(void *cfg);
 
 #define max(x,y) (((x)>(y))?(x):(y))
@@ -168,56 +166,6 @@ workitem popwork(workitem *stack) {
   return tmp;
 }
 
-int TargaOpen(char *filename, int x, int y, int init) {
-  int file, i;
-  unsigned char tgaheader[18];
-  static unsigned char grey[131072];
-  int oflags = O_WRONLY;
-  if (init) oflags |= O_TRUNC|O_CREAT;
-  
-  if ((file = open(filename, oflags, 0740)) < 0) {
-    perror(filename);
-    return -1;
-  }
-  if (init) {
-    memset(tgaheader, 0, 18);
-    tgaheader[2] = 2;
-    tgaheader[12] = (unsigned char)(x & 0xFF);
-    tgaheader[13] = (unsigned char)((x >> 8) & 0xFF);
-    tgaheader[14] = (unsigned char)(y & 0xFF);
-    tgaheader[15] = (unsigned char)((y >> 8) & 0xFF);
-    tgaheader[16] = 24;
-    tgaheader[17] = 0x20;
-    if (write(file, tgaheader, 18) < 1) {
-      perror("write()");
-      exit(-2);
-    }
-    memset(grey, 0xA0, sizeof(grey));
-    for (i=0; i < x*y*3; i+=sizeof(grey)) {
-      if (write(file, grey, min(sizeof(grey), x*y*3-i)) < 1) {
-	perror("write()");
-	exit(-2);
-      }
-    }
-  }
-  return file;
-}
-
-void TargaWrite(int file, int width, int height, int x, int y,
-		unsigned char r,unsigned char g,unsigned char  b) {
-  lseek(file, 3 * (y * width + x) + 18, SEEK_SET);
-  if (write(file, &b, 1) < 1 ||
-      write(file, &g, 1) < 1 ||
-      write(file, &r, 1) < 1) {
-    perror("write()");
-    exit(-2);
-  }
-}
-
-void TargaClose(int file) {
-   close(file);
-}
-
 int mandel(FLOAT cx, FLOAT cy, unsigned long maxiter) {
  unsigned long i=maxiter;
  FLOAT zx=cx,zy=cy,zx2=cx*cx,zy2=cy*cy;
@@ -337,7 +285,7 @@ int main(int argc,char *argv[]) {
 
   char filename[80];
   char *p;
-  int tfile;
+  TargaHandle tfile;
 
   FILE *deffile;
 
@@ -349,6 +297,8 @@ int main(int argc,char *argv[]) {
   long totpix=(long)WIDTH*HEIGHT;
   long totpix_done=0;
   double totpix_done_percent;
+
+  static char tmpbuf1[1024], tmpbuf2[1024];
 
   while ((o=getopt(argc, argv, "d:p:")) != EOF) {
     switch (o) {
@@ -404,7 +354,10 @@ int main(int argc,char *argv[]) {
   pthread_mutex_init(&lock, NULL);
 
   fprintf(stderr, "Initializing tga file.    \n");
-  tfile=TargaOpen(filename, WIDTH, HEIGHT, 1); // Initialize file
+  sprintf(tmpbuf1, "%s %s", __FILE__, __DATE__);
+  sprintf(tmpbuf2, "%s", deffilename);
+
+  tfile=TargaOpen(filename, WIDTH, HEIGHT, tmpbuf1, tmpbuf2); // Initialize file
   fprintf(stderr, "Done. Starting...\n");
 
   while (nthreads > 0 || workstack || result) {
@@ -473,7 +426,8 @@ int main(int argc,char *argv[]) {
 	totpix_done_percent=(double)100 * (double)totpix_done / (double)totpix;
 	fprintf(stderr, "(%d, %d) : %d  (%.2g%%, %d threads)                \r",
 		res->x, res->y, res->val, totpix_done_percent, nthreads);
-	TargaWrite(tfile, WIDTH, HEIGHT, res->x, res->y, r, g, b);
+	TargaSeek(tfile, res->y * WIDTH + res->x);
+	TargaWrite(tfile, r, g, b);
 	free(res);
       }
       pthread_mutex_unlock(&lock);

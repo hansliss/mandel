@@ -26,11 +26,13 @@ TARGET1=mandeldump
 SOURCES1=mandeldump.c
 OBJS1=mandeldump.o
 TARGET2=mandelmakepic
-SOURCES2=mandelmakepic.c
-OBJS2=mandelmakepic.o
+SOURCES2=mandelmakepic.c targa.c
+OBJS2=mandelmakepic.o targa.o
+HEADERS2=targa.h
 TARGET3=mandelmakeoutline
-SOURCES3=mandelmakeoutline.c
-OBJS3=mandelmakeoutline.o
+SOURCES3=mandelmakeoutline.c targa.c
+OBJS3=mandelmakeoutline.o targa.o
+HEADERS3=targa.h
 TARGET4=mandelanalyze
 SOURCES4=mandelanalyze.c
 OBJS4=mandelanalyze.o
@@ -38,8 +40,9 @@ TARGET5=mandelxform
 SOURCES5=mandelxform.c
 OBJS5=mandelxform.o
 TARGET6=thmand
-SOURCES6=thmand.c
-OBJS6=thmand.o
+SOURCES6=thmand.c targa.c
+OBJS6=thmand.o targa.o
+HEADERS6=targa.h
 TARGET7=mandelxform_mpf
 SOURCES7=mandelxform_mpf.c
 OBJS7=mandelxform_mpf.o
@@ -80,15 +83,15 @@ $(TARGET7): $(OBJS7)
 
 $(OBJS1): $(SOURCES1)
 
-$(OBJS2): $(SOURCES2)
+$(OBJS2): $(SOURCES2) $(HEADERS2)
 
-$(OBJS3): $(SOURCES3)
+$(OBJS3): $(SOURCES3) $(HEADERS3)
 
 $(OBJS4): $(SOURCES4)
 
 $(OBJS5): $(SOURCES5)
 
-$(OBJS6): $(SOURCES6)
+$(OBJS6): $(SOURCES6) $(HEADERS6)
 
 $(OBJS7): $(SOURCES7)
 
