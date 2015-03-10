@@ -62,11 +62,14 @@ TargaHandle TargaOpen(char *filename, int width, int height, char *author, char 
   TargaHeader fileheader;
   TargaFooter filefooter;
   TargaExtensionArea fileextension;
-  int restart=1;
-  static char *initial_mode="r+";
+  char *initial_mode="w+";
   if (!writing) initial_mode="r";
   TargaHandle newhandle=(TargaHandle)malloc(sizeof(struct TargaHandle_s));
-  if (!newhandle) return NULL;
+  if (!newhandle) {
+    perror("malloc()");
+    return NULL;
+  }
+
   memset(newhandle, 0, sizeof(struct TargaHandle_s));
   newhandle->width=width;
   newhandle->height=height;
@@ -77,29 +80,19 @@ TargaHandle TargaOpen(char *filename, int width, int height, char *author, char 
       if (fileheader.ImgWidth == width && fileheader.ImgHeight == height) {
 	fseek(newhandle->file,0L,SEEK_END);
 	newhandle->currentsize=(ftell(newhandle->file)-(18+fileheader.IDFieldSize))/3;
-	if ((newhandle->currentsize > 0) &&
-	    (newhandle->currentsize < ((unsigned long)(newhandle->width)*(unsigned long)(newhandle->height)))) {
-	  restart=0;
-	}
       }
     }
     if (writing) {
-      if (restart) {
-	fprintf(stderr, "Truncating %s\n", filename);
-	fclose(newhandle->file);
-	newhandle->currentsize = 0;
-	newhandle->file=NULL;
-      } else {
-	fprintf(stderr, "%s contains %lu pixels. Appending - ignoring new creator and job name\n", filename, newhandle->currentsize);
-	fseek(newhandle->file,
-	      (long)((newhandle->currentsize * 3) + sizeof(TargaHeader)),
-	      SEEK_SET);
-      }
+      fprintf(stderr, "Truncating %s\n", filename);
+      fclose(newhandle->file);
+      newhandle->currentsize = 0;
+      newhandle->file=NULL;
       if (!(newhandle->file) && ((newhandle->file) = fopen(filename, "w")) == NULL) {
 	perror(filename);
 	free(newhandle);
 	return NULL;
       }
+
       memset(&fileheader, 0, 18);
       if (jobname) fileheader.IDFieldSize=strlen(jobname)+1;
       fileheader.ImageType = 2;
@@ -134,6 +127,8 @@ TargaHandle TargaOpen(char *filename, int width, int height, char *author, char 
       newhandle->comment3 = strdup(fileextension.AuthorComments3);
       newhandle->comment4 = strdup(fileextension.AuthorComments4);
     }
+  } else {
+    perror(filename);
   }
 
   return newhandle;
