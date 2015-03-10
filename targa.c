@@ -1,3 +1,4 @@
+#include <netinet/in.h>
 #include "targa.h"
 
 uint16_t swapShort(uint16_t v) {
