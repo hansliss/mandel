@@ -299,6 +299,19 @@ int main(int argc, char *argv[])
   hp_s=hp;
   sp_s=sp;
   vp_s=vp;
+  if (hi==1) mih=1;
+  if (si==1) mis=1;
+  if (vi==1) miv=1;
+  if (hl==1) mlh=1;
+  if (sl==1) mls=1;
+  if (vl==1) mlv=1;
+  if (hp==1) mph=1;
+  if (sp==1) mps=1;
+  if (vp==1) mpv=1;
+
+  printf("H%Lg,%d,%Lg S%Lg,%d,%Lg V%Lg,%d,%Lg I%d%d%d i%d%d%d L%d%d%d l%d%d%d P%d%d%d p%d%d%d\n",
+	 hks,hsteps,hdiff,sks,ssteps,sdiff,vks,vsteps,vdiff,hi,si,vi,mih,mis,miv,
+	 hl,sl,vl,mlh,mls,mlv,hp,sp,vp,mph,mps,mpv);
 
   for (hi=hi_s; hi <= mih; hi++) {
     for (si=si_s; si <= mis; si++) {
@@ -320,8 +333,9 @@ int main(int argc, char *argv[])
 
 			  if (hsteps != 1 || ssteps != 1 || vsteps != 1 ||
 			      mih || mis || miv || mlh || mls || mlv || mph || mps || mpv) {
-			    sprintf(currentoutfilename, "%s_%#05.4Lg_%#05.4Lg_%#05.4Lg_I%d%d%d_L%d%d%d_P%d%d%d.tga", outfilename, hk, sk, vk, hi, si, vi, hl, sl, vl, hp, sp, vp);
-			    if (stat(currentoutfilename, &statbuf) != 0) {
+			    sprintf(currentoutfilename, "%s_%Lg_%Lg_%Lg_I%d%d%d_L%d%d%d_P%d%d%d.tga", outfilename, hk, sk, vk, hi, si, vi, hl, sl, vl, hp, sp, vp);
+			    printf("%s\n", currentoutfilename);
+			    if (stat(currentoutfilename, &statbuf) == 0) {
 			      skip=1;
 			    }
 			  } else {
