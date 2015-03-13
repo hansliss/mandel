@@ -207,5 +207,12 @@ void TargaFinish(TargaHandle h) {
 
 void TargaClose(TargaHandle h) {
   fclose(h->file);
+  if (h->author != NULL) free(h->author);
+  if (h->jobname != NULL) free(h->jobname);
+  if (h->comment1 != NULL) free(h->comment1);
+  if (h->comment2 != NULL) free(h->comment2);
+  if (h->comment3 != NULL) free(h->comment3);
+  if (h->comment4 != NULL) free(h->comment4);
+  free(h);
 }
 

@@ -124,7 +124,7 @@ int main(int argc, char *argv[])
 {
   FILE *infile;
   int skip;
-  unsigned int width, height, *buffer, i, j, *hist, vmax, nmax, n;
+  unsigned int width, height, *buffer, i, j, *hist, vmax, nmax, n, looping=0;
   unsigned long wtmp, htmp;
   unsigned long loval, hival, maxiter, mival=1048576L, hival_threshold=2;
   unsigned long pixels=0, blackpixels=0;
@@ -170,21 +170,21 @@ int main(int argc, char *argv[])
       if (sscanf(optarg, "%Lf,%i,%Lf", &hks, &hsteps, &hdiff) != 3) {
 	hsteps=1; hdiff=0;
 	sscanf(optarg, "%Lf", &hks);
-      }
+      } else looping=1;
       break;
     case 'V': sscanf(optarg, "%Lf", &vc); break;
     case 'v': 
       if (sscanf(optarg, "%Lf,%i,%Lf", &vks, &vsteps, &vdiff) != 3) {
 	vsteps=1; vdiff=0;
 	sscanf(optarg, "%Lf", &vks);
-      }
+      } else looping=1;
       break;
     case 'S': sscanf(optarg, "%Lf", &sc); break;
     case 's':
       if (sscanf(optarg, "%Lf,%i,%Lf", &sks, &ssteps, &sdiff) != 3) {
 	ssteps=1; sdiff=0;
 	sscanf(optarg, "%Lf", &sks);
-      }
+      } else looping=1;
       break;
     case 'I': if (strlen(optarg)==3) {
 	hi=((optarg[0]=='1')?1:0);
@@ -290,6 +290,10 @@ int main(int argc, char *argv[])
 
   printf("maxiter\t%lu\nlow val\t%lu\nhigh val\t%lu\n", maxiter, loval, hival); fflush(stdout);
 
+  if (mih || mis || miv || mlh || mls || mlv || mph || mps || mpv) {
+    looping=1;
+  }
+
   hi_s=hi;
   si_s=si;
   vi_s=vi;
@@ -331,8 +335,7 @@ int main(int argc, char *argv[])
 
 			  skip=0;
 
-			  if (hsteps != 1 || ssteps != 1 || vsteps != 1 ||
-			      mih || mis || miv || mlh || mls || mlv || mph || mps || mpv) {
+			  if (looping) {
 			    sprintf(currentoutfilename, "%s_%Lg_%Lg_%Lg_I%d%d%d_L%d%d%d_P%d%d%d.tga", outfilename, hk, sk, vk, hi, si, vi, hl, sl, vl, hp, sp, vp);
 			    printf("%s\n", currentoutfilename);
 			    if (stat(currentoutfilename, &statbuf) == 0) {
