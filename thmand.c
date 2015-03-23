@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <fcntl.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <gmp.h>
+#include <netdb.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -9,41 +13,29 @@
 #include <pthread.h>
 #include <signal.h>
 #include <sys/resource.h>
-
-#include "targa.h"
+#include <netinet/in.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <time.h>
 
 FILE *logfile;
 
 #define FLOAT long double
 
-#if 1
-#define WIDTH 10240
-#define HEIGHT 10240
-#define AVGN 100
-#define SECTS_PER_SIDE 400
-#else
-#define WIDTH 1024
-#define HEIGHT 1024
-#define AVGN 6
-#define SECTS_PER_SIDE 40
-#endif
-
-#define MAX_CHECK_SIZE 300
+#define MAX_CHECK_SIZE 1000
 #define MAX_RENDER_SIZE 10
 
-#define NTHREADS 8 //(((SECTS_PER_SIDE) * (SECTS_PER_SIDE))*10)
-
-#ifndef MAXITER
-#define MAXITER 2*524288L
-#endif
-unsigned long maxiter=MAXITER;
+unsigned long width=1024;
+unsigned long height=1024;
+unsigned long maxiter=1048576L;
 
 void *run(void *cfg);
 
 #define max(x,y) (((x)>(y))?(x):(y))
 #define min(x,y) (((x)<(y))?(x):(y))
-#define XVAL(xpos) ((point_x0)+(((point_x1)-(point_x0))*(FLOAT)(xpos)/(FLOAT)((WIDTH) * (AVGN))))
-#define YVAL(ypos) ((point_y0)+(((point_y1)-(point_y0))*(FLOAT)((HEIGHT) * (AVGN) - ypos)/(FLOAT)((HEIGHT) * (AVGN))))
+#define XVAL(xpos) ((point_x0)+(((point_x1)-(point_x0))*(FLOAT)(xpos)/(FLOAT)width))
+#define YVAL(ypos) ((point_y0)+(((point_y1)-(point_y0))*(FLOAT)(height - ypos)/(FLOAT)height))
 
 typedef unsigned char byte;
 
@@ -96,7 +88,8 @@ void debug(const char *fmt, ...) {
 }
 
 typedef struct finished_point_s {
-  int x, y, val;
+  unsigned int x, y;
+  unsigned long val;
   struct finished_point_s *next;
 } *finished_point;
 
@@ -112,7 +105,7 @@ struct taskconfig {
   pthread_mutex_t *lock;
 };
 
-void pushres(finished_point *list, int x, int y, int val) {
+void pushres(finished_point *list, int x, int y, unsigned int val) {
   finished_point tmp=*list;
   (*list) = (finished_point)malloc(sizeof(struct finished_point_s));
   if ((*list) == NULL) {
@@ -166,7 +159,7 @@ workitem popwork(workitem *stack) {
   return tmp;
 }
 
-int mandel(FLOAT cx, FLOAT cy, unsigned long maxiter) {
+unsigned long mandel(FLOAT cx, FLOAT cy, unsigned long maxiter) {
  unsigned long i=maxiter;
  FLOAT zx=cx,zy=cy,zx2=cx*cx,zy2=cy*cy;
  while((i>0)&&(zx2+zy2 < 4.0)) {
@@ -179,7 +172,7 @@ int mandel(FLOAT cx, FLOAT cy, unsigned long maxiter) {
 #ifdef DEBUG
  fprintf(logfile,"mandel=%u, maxiter=%u\n",i,maxiter);
 #endif
- if (i) return 0; else return 1;
+ return maxiter-i;
 }
  
 void *run_checkfilled(void *cfgi) {
@@ -193,21 +186,21 @@ void *run_checkfilled(void *cfgi) {
   x1 = cfg->x1;
   y0 = cfg->y0;
   y1 = cfg->y1;
-  yval=YVAL(y0 * (AVGN));
-  yval1=YVAL(y1 * (AVGN));
+  yval=YVAL(y0);
+  yval1=YVAL(y1);
   for (x = x0; x<= x1; x++) {
-    xval=XVAL(x * (AVGN));
-    if (!mandel(xval, yval, cfg->maxiter) || !mandel(xval, yval1, cfg->maxiter)) {
+    xval=XVAL(x);
+    if (mandel(xval, yval, cfg->maxiter) < maxiter || mandel(xval, yval1, cfg->maxiter) < maxiter) {
       filled=0;
       break;
     }
   }
   if (filled) {
-    xval=XVAL(x0 * (AVGN));
-    xval1=XVAL(x1 * (AVGN));
+    xval=XVAL(x0);
+    xval1=XVAL(x1);
     for (y = y0; y<= y1; y++) {
-      yval=YVAL(y * (AVGN));
-      if (!mandel(xval, yval, cfg->maxiter) || !mandel(xval1, yval, cfg->maxiter)) {
+      yval=YVAL(y);
+      if (mandel(xval, yval, cfg->maxiter) < maxiter || mandel(xval1, yval, cfg->maxiter) < maxiter) {
 	filled=0;
 	break;
       }
@@ -216,7 +209,7 @@ void *run_checkfilled(void *cfgi) {
       pthread_mutex_lock(cfg->lock);
       for (x = x0; x <= x1; x++)
 	for (y = y0; y <= y1; y++)
-	  pushres(cfg->result, x, y, 0);
+	  pushres(cfg->result, x, y, maxiter);
       pthread_mutex_unlock(cfg->lock);
       cfg->done = 1;
       return NULL;
@@ -229,7 +222,7 @@ void *run_dowork(void *cfgi) {
   unsigned int x,y;
   FLOAT xval,yval;
   int x0, x1, y0, y1;
-  int ysub, xsub, val;
+  unsigned long val;
   struct taskconfig *cfg = (struct taskconfig *)cfgi;
 
   x0 = cfg->x0;
@@ -238,16 +231,10 @@ void *run_dowork(void *cfgi) {
   y1 = cfg->y1;
 
   for (y = y0; y <= y1; y++) {
+    yval=YVAL(y);
     for (x = x0; x <= x1; x++) {
-      val=0;
-      for (ysub=0; ysub < AVGN; ysub++) {
-	yval=YVAL(y * (AVGN) + ysub);
-	for (xsub=0; xsub < AVGN; xsub++) {
-	  xval=XVAL(x * (AVGN) + xsub);
-	  if (!mandel(xval, yval, cfg->maxiter))
-	    val++;
-	}
-      }
+      xval=XVAL(x);
+      val=mandel(xval, yval, cfg->maxiter);
       pthread_mutex_lock(cfg->lock);
       pushres(cfg->result, x, y, val);
       pthread_mutex_unlock(cfg->lock);
@@ -260,7 +247,7 @@ void *run_dowork(void *cfgi) {
 }
 
 void usage(char *progname) {
-  fprintf(stderr,"Usage: %s -d <file> [-p <cpu cores>]\n", progname);
+  fprintf(stderr,"Usage: %s -d <def. file> -o <out file> -w <width> -h <height> -m <max iterations>[-p <cpu cores>]\n", progname);
   fprintf(stderr,"\tWhere <file> contains three values, each on one line:\n");
   fprintf(stderr,"\t  center X\n\t  center Y\n\t  width.\n");
 }
@@ -276,89 +263,89 @@ void quadsplit(workitem *stack, workitem current) {
 }
 
 int main(int argc,char *argv[]) {
-  static struct taskconfig cfg[NTHREADS];
-  static pthread_t threads[NTHREADS];
-  int i, r, nthreads=0, ncores=8;
+  static struct taskconfig *cfg=NULL;
+  static pthread_t *threads=NULL;
 
-  char *deffilename=NULL;
+  int i, r, nthreads=0, ncores=0;
+
   int o;
 
-  char filename[80];
-  char *p;
-  TargaHandle tfile;
+  char *deffilename=NULL, *dumpfilename=NULL;
+  FILE *deffile, *dumpfile;
 
-  FILE *deffile;
-
+  unsigned long wtmp, htmp;
+ 
   static workitem workstack=NULL, current;
 
   static finished_point result=NULL;
   static pthread_mutex_t lock;
 
-  long totpix=(long)WIDTH*HEIGHT;
+  long totpix=(long)width*height;
   long totpix_done=0;
   double totpix_done_percent;
 
-  static char tmpbuf1[1024], tmpbuf2[1024];
-
-  while ((o=getopt(argc, argv, "d:p:")) != EOF) {
+  while ((o=getopt(argc, argv, "d:o:p:w:h:m:")) != EOF) {
     switch (o) {
     case 'd': deffilename=optarg; break;
+    case 'o': dumpfilename=optarg; break;
     case 'p': ncores=atoi(optarg); break;
+    case 'w': width=atoi(optarg); break;
+    case 'h': height=atoi(optarg); break;
+    case 'm': maxiter=atoi(optarg); break;
     default: usage(argv[0]); return -1; break;
     }
   }
 
-  if (!deffilename || ncores < 1) {
+  if (!deffilename || !dumpfilename || ncores < 1) {
     usage(argv[0]);
     return -1;
   }
 
-  strcpy(filename,deffilename);
-  if ((p=strrchr(filename,'.'))!=NULL)
-    *p='\0';
-  strcat(filename,".def");
-  if (!(deffile=fopen(filename,"r")))
+  totpix=(long)width*height;
+
+  cfg=(struct taskconfig *)malloc(sizeof(struct taskconfig) * ncores);
+  threads=(pthread_t *)malloc(sizeof(pthread_t) * ncores);
+
+  if (!(deffile=fopen(deffilename,"r")))
     {
-      fprintf(stderr,"Failed to open definition file %s\n",filename);
+      perror(deffilename);
       return -1;
     }
   
-  for (i=0; i<NTHREADS; i++) cfg[i].taskid=-1;
-
   if (fscanf(deffile,"%30Lf\n",&centx) < 1 ||
       fscanf(deffile,"%30Lf\n",&centy) < 1 ||
       fscanf(deffile,"%30Lf\n",&dx) < 1) {
-    fprintf(stderr, "Error reading %s\n", filename);
+    fprintf(stderr, "Error reading %s\n", deffilename);
     exit(-2);
   }
   fclose(deffile);
 
+  if (!(dumpfile=fopen(dumpfilename, "w"))) {
+    perror(dumpfilename);
+    return -2;
+  }
+
+  wtmp=htonl(width);
+  htmp=htonl(height);
+  fwrite(&wtmp, sizeof(wtmp), 1, dumpfile);
+  fwrite(&htmp, sizeof(htmp), 1, dumpfile);
+
+  for (i=0; i<ncores; i++) cfg[i].taskid=-1;
+
   point_x0=centx-dx/2;
   point_x1=centx+dx/2;
-  point_y0=centy-(((FLOAT)HEIGHT)/((FLOAT)WIDTH))*dx/2;
-  point_y1=centy+(((FLOAT)HEIGHT)/((FLOAT)WIDTH))*dx/2;
-  point_size=((point_x1-point_x0)/WIDTH);
+  point_y0=centy-(((FLOAT)height)/((FLOAT)width))*dx/2;
+  point_y1=centy+(((FLOAT)height)/((FLOAT)width))*dx/2;
+  point_size=((point_x1-point_x0)/width);
 
   fprintf(stderr, "Current center is %20.20Lf, %20.20Lf, dx=%20.20Lf\n",centx,centy,dx);
   fprintf(stderr, "Corners are %20.20Lf, %20.20Lf  and  %20.20Lf, %20.20Lf\n",
 	 point_x0,point_y0,point_x1,point_y1);
   fprintf(stderr, "Maxiter is %ld\n", maxiter);
 
-  pushwork(&workstack, 0, 0, WIDTH-1, HEIGHT-1, 0);
-
-  strcpy(filename,deffilename);
-  if ((p=strrchr(filename,'.'))!=NULL)
-    *p='\0';
-  strcat(filename,".tga");
+  pushwork(&workstack, 0, 0, width-1, height-1, 0);
 
   pthread_mutex_init(&lock, NULL);
-
-  fprintf(stderr, "Initializing tga file.    \n");
-  sprintf(tmpbuf1, "%s %s", __FILE__, __DATE__);
-  sprintf(tmpbuf2, "%s", deffilename);
-
-  tfile=TargaOpen(filename, WIDTH, HEIGHT, tmpbuf1, tmpbuf2, 1); // Initialize file
-  fprintf(stderr, "Done. Starting...\n");
 
   while (nthreads > 0 || workstack || result) {
     if (nthreads < ncores && (current = popwork(&workstack)) != NULL) {
@@ -366,8 +353,8 @@ int main(int argc,char *argv[]) {
 	  current->y1 - current->y0 > MAX_CHECK_SIZE) {
 	quadsplit(&workstack, current);
       } else if (!current->checked) {
-	for (i=0; i<NTHREADS; i++) if (cfg[i].taskid == -1) break;
-	if (i==NTHREADS) {fprintf(stderr,"Fatal error\n"); return -100;}
+	for (i=0; i<ncores; i++) if (cfg[i].taskid == -1) break;
+	if (i==ncores) {fprintf(stderr,"Fatal error\n"); return -100;}
 	cfg[i].taskid=i;
 	cfg[i].x0 = current->x0;
 	cfg[i].y0 = current->y0;
@@ -384,8 +371,8 @@ int main(int argc,char *argv[]) {
 		 current->y1 - current->y0 > MAX_RENDER_SIZE) {
 	quadsplit(&workstack, current);
       } else {
-	for (i=0; i<NTHREADS; i++) if (cfg[i].taskid == -1) break;
-	if (i==NTHREADS) {fprintf(stderr,"Fatal error\n"); return -100;}
+	for (i=0; i<ncores; i++) if (cfg[i].taskid == -1) break;
+	if (i==ncores) {fprintf(stderr,"No free slots? There should be free slots!\n"); return -100;}
 	cfg[i].taskid=i;
 	cfg[i].x0 = current->x0;
 	cfg[i].y0 = current->y0;
@@ -402,7 +389,7 @@ int main(int argc,char *argv[]) {
       free(current);
     }
 
-    for (i = 0; i < NTHREADS; i++) {
+    for (i = 0; i < ncores; i++) {
       if (cfg[i].taskid >= 0 && pthread_kill(threads[i], 0) != 0) {
 	pthread_join(threads[i], (void **)&r);
 	fprintf(stderr, "Thread %d terminated                          \n", i);
@@ -419,22 +406,24 @@ int main(int argc,char *argv[]) {
       while (result) {
 	finished_point res=result;
 	result=result->next;
-	byte r, g, b;
-	if (res->val == ((AVGN)*(AVGN))) r=g=b=255;
-	else r=g=b=(127 * res->val) / ((AVGN)*(AVGN));
+	unsigned int colornum=htonl(res->val);
+	fseek(dumpfile, 2 * sizeof(wtmp) + sizeof(colornum)*(res->y * width + res->x), SEEK_SET);
+	fwrite(&colornum, sizeof(colornum), 1, dumpfile);
+	fflush(dumpfile);
 	totpix_done++;
 	totpix_done_percent=(double)100 * (double)totpix_done / (double)totpix;
-	fprintf(stderr, "(%d, %d) : %d  (%.2g%%, %d threads)                \r",
+	/*
+	  fprintf(stderr, "(%d, %d) : %ld  (%.2g%%, %d threads)                \r",
 		res->x, res->y, res->val, totpix_done_percent, nthreads);
-	TargaSeek(tfile, res->y * WIDTH + res->x);
-	TargaWrite(tfile, r, g, b);
+	*/
 	free(res);
       }
+      fprintf(stderr, "%.2g%% done, %d threads\n", totpix_done_percent, nthreads);
       pthread_mutex_unlock(&lock);
     }
     if (nthreads == ncores || !workstack) usleep(200);
   }
 
-  TargaClose(tfile);
+  fclose(dumpfile);
   return 0;
 }
