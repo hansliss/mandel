@@ -130,10 +130,10 @@ int main(int argc, char *argv[])
   unsigned long pixels=0, blackpixels=0;
   int x, y;
 
-  long double hc=0.66, hk, sc=0, sk, vc=0, vk;
+  long double hc=0.66, hk, sc=0, sk, vc=0, vk, hcs=0.66, scs=0, vcs=0, hcdiff=0, scdiff=0, vcdiff=0, rhk, rsk, rvk;
   long double hks=3.8, sks=5, vks=0, hdiff=0, sdiff=0, vdiff=0;
-  int hind, sind, vind;
-  int hsteps=1, ssteps=1, vsteps=1;
+  int hind, sind, vind, hcind, scind, vcind;
+  int hsteps=1, ssteps=1, vsteps=1, hcsteps=1, scsteps=1, vcsteps=1;
   int hi=0, hl=0, si=1, sl=0, vi=1, vl=0, hp=0, sp=0, vp=0;
   int hi_s=0, hl_s=0, si_s=1, sl_s=0, vi_s=1, vl_s=0, hp_s=0, sp_s=0, vp_s=0;
   int mih=0, mis=0, miv=0, mlh=0, mls=0, mlv=0, mph=0, mps=0, mpv=0;
@@ -165,21 +165,36 @@ int main(int argc, char *argv[])
     case 'm': mival=atoi(optarg); break;
     case 't': hival_threshold=atoi(optarg); break;
     case 'C': scriptfilename=optarg; break;
-    case 'H': sscanf(optarg, "%Lf", &hc); break;
+    case 'H':
+      if (sscanf(optarg, "%Lf,%i,%Lf", &hcs, &hcsteps, &hcdiff) != 3) {
+	hcsteps=1; hcdiff=0;
+	sscanf(optarg, "%Lf", &hcs);
+      } else looping=1;
+      break;
     case 'h':
       if (sscanf(optarg, "%Lf,%i,%Lf", &hks, &hsteps, &hdiff) != 3) {
 	hsteps=1; hdiff=0;
 	sscanf(optarg, "%Lf", &hks);
       } else looping=1;
       break;
-    case 'V': sscanf(optarg, "%Lf", &vc); break;
+    case 'V':
+      if (sscanf(optarg, "%Lf,%i,%Lf", &vcs, &vcsteps, &vcdiff) != 3) {
+	vcsteps=1; vcdiff=0;
+	sscanf(optarg, "%Lf", &vcs);
+      } else looping=1;
+      break;
     case 'v': 
       if (sscanf(optarg, "%Lf,%i,%Lf", &vks, &vsteps, &vdiff) != 3) {
 	vsteps=1; vdiff=0;
 	sscanf(optarg, "%Lf", &vks);
       } else looping=1;
       break;
-    case 'S': sscanf(optarg, "%Lf", &sc); break;
+    case 'S':
+      if (sscanf(optarg, "%Lf,%i,%Lf", &scs, &scsteps, &scdiff) != 3) {
+	scsteps=1; scdiff=0;
+	sscanf(optarg, "%Lf", &scs);
+      } else looping=1;
+      break;
     case 's':
       if (sscanf(optarg, "%Lf,%i,%Lf", &sks, &ssteps, &sdiff) != 3) {
 	ssteps=1; sdiff=0;
@@ -328,118 +343,131 @@ int main(int argc, char *argv[])
 		  for (vp=vp_s; vp <= mpv; vp++) {
 		    for (hind=0; hind < hsteps; hind++) {
 		      hk = hks + (long double)hind * hdiff;
+		      rhk = hk;
+		      if (hp) hk /= ((double)hival-loval);
 		      for (sind=0; sind < ssteps; sind++) {
 			sk = sks + (long double)sind * sdiff;
+			rsk = sk;
+			if (sp) sk /= ((double)hival-loval);
 			for (vind=0; vind < vsteps; vind++) {
 			  vk = vks + (long double)vind * vdiff;
+			  rvk = vk;
+			  if (vp) vk /= ((double)hival-loval);
+			  for (hcind=0; hcind < hcsteps; hcind++) {
+			    hc = hcs + (long double)hcind * hcdiff;
+			    for (scind=0; scind < scsteps; scind++) {
+			      sc = scs + (long double)scind * scdiff;
+			      for (vcind=0; vcind < vcsteps; vcind++) {
+				vc = vcs + (long double)vcind * vcdiff;
 
-			  skip=0;
 
-			  if (looping) {
-			    sprintf(currentoutfilename, "%s_%Lg_%Lg_%Lg_I%d%d%d_L%d%d%d_P%d%d%d.tga", outfilename, hk, sk, vk, hi, si, vi, hl, sl, vl, hp, sp, vp);
-			    printf("%s\n", currentoutfilename);
-			    if (stat(currentoutfilename, &statbuf) == 0) {
-			      skip=1;
-			    }
-			  } else {
-			    strncpy(currentoutfilename, outfilename, sizeof(currentoutfilename)-1);
-			    currentoutfilename[sizeof(currentoutfilename)-1]='\0';
-			  }
+				skip=0;
 
-			  printf("H:[%Lg, %Lg%s%s%s], S:[%Lg, %Lg%s%s%s], V:[%Lg, %Lg%s%s%s]\n",
-				 hc, hk, hi?", inv":"", hl?", log":"", hp?", prop":"",
-				 sc, sk, si?", inv":"", sl?", log":"", sp?", prop":"",
-				 vc, vk, vi?", inv":"", vl?", log":"", vp?", prop":"");
-
-			  if (!skip) {
-			    sprintf(tmpbuf1, "%s %s", __FILE__, __DATE__);
-			    sprintf(tmpbuf2, "%s", infilename);
-			    if (!(th = TargaOpen(currentoutfilename, width, height, tmpbuf1, tmpbuf2, 1))) return -2;
-
-			    sprintf(tmpbuf1, "-H%Lg -h%Lg -S%Lg -s%Lg -V%Lg -v%Lg -I %c%c%c -L %c%c%c -P%c%c%c\n",
-				    hc, hk, sc, sk, vc, vk,
-				    hi?'1':'0', si?'1':'0', vi?'1':'0',
-				    hl?'1':'0', sl?'1':'0', vl?'1':'0',
-				    hp?'1':'0', sp?'1':'0', vp?'1':'0');
-			    TargaAddComment(th, tmpbuf1);
-
-			    if (deffilename) {
-			      if (!(infile=fopen(deffilename, "r"))) perror(deffilename);
-			      else {
-				if (fscanf(infile, "%60Lf\n", &def_x) != 1) {
-				  perror("fscanf()");
-				  return -2;
-				}
-				if (fscanf(infile, "%60Lf\n", &def_y) != 1) {
-				  perror("fscanf()");
-				  return -2;
-				}
-				if (fscanf(infile, "%60Lf\n", &def_dx) != 1) {
-				  perror("fscanf()");
-				  return -2;
-				}
-				fclose(infile);
-				sprintf(tmpbuf1, "x=%.50Lg", def_x);
-				TargaAddComment(th, tmpbuf1);
-				sprintf(tmpbuf1, "y=%.50Lg", def_y);
-				TargaAddComment(th, tmpbuf1);
-				sprintf(tmpbuf1, "dx=%.50Lg", def_dx);
-				TargaAddComment(th, tmpbuf1);
-			      }
-			    }
-
-			    if (hp) hk /= ((double)hival-loval);
-			    if (sp) sk /= ((double)hival-loval);
-			    if (vp) vk /= ((double)hival-loval);
-
-			    pixels=blackpixels=0;
-
-			    for (y=0; y<height; y++) {
-			      fprintf(stderr,"  Line: %d\r",y);
-			      for (x=0; x<width; x++) {
-				unsigned int colornum=buffer[x+y*width];
-				if (colornum == mival) {
-				  r = 0;
-				  g = 0;
-				  b = 0;
+				if (looping) {
+				  sprintf(currentoutfilename, "%s_H%Lg_h%Lg_S%Lg_s%Lg_V%Lg_v%Lg_I%d%d%d_L%d%d%d_P%d%d%d.tga", outfilename, hc, rhk, sc, rsk, vc, rvk, hi, si, vi, hl, sl, vl, hp, sp, vp);
+				  printf("%s\n", currentoutfilename);
+				  if (stat(currentoutfilename, &statbuf) == 0) {
+				    skip=1;
+				  }
 				} else {
-#ifndef BW
-				  double intgr;
-				  double span=(hival-loval);
-				  h=s=v=(colornum-loval) % (int)span;
-				  if (hl) h=logl(h)/logl(span); else h /= span;
-				  if (sl) s=logl(s)/logl(span); else s /= span;
-				  if (vl) v=logl(v)/logl(span); else v /= span;
-				  h=modf(hc + hk * h, &intgr);
-				  if (hi) h=1-h;
-				  s=modf(sc + sk * s, &intgr);
-				  if (si) s=1-s;
-				  v=modf(vc + vk * v, &intgr);
-				  if (vi) v=1-v;
-#else
-				  h=v=1;s=0;
-#endif
-				  hsv2rgb(h,s,v,&r,&g,&b);
-				  if (v < 0.15) blackpixels++;
-				  pixels++;
+				  strncpy(currentoutfilename, outfilename, sizeof(currentoutfilename)-1);
+				  currentoutfilename[sizeof(currentoutfilename)-1]='\0';
 				}
-				TargaWrite(th, r, g, b);
+
+				printf("H:[%Lg, %Lg%s%s%s], S:[%Lg, %Lg%s%s%s], V:[%Lg, %Lg%s%s%s]\n",
+				       hc, rhk, hi?", inv":"", hl?", log":"", hp?", prop":"",
+				       sc, rsk, si?", inv":"", sl?", log":"", sp?", prop":"",
+				       vc, rvk, vi?", inv":"", vl?", log":"", vp?", prop":"");
+
+				if (!skip) {
+				  sprintf(tmpbuf1, "%s %s", __FILE__, __DATE__);
+				  sprintf(tmpbuf2, "%s", infilename);
+				  if (!(th = TargaOpen(currentoutfilename, width, height, tmpbuf1, tmpbuf2, 1))) return -2;
+
+				  sprintf(tmpbuf1, "-H%Lg -h%Lg -S%Lg -s%Lg -V%Lg -v%Lg -I %c%c%c -L %c%c%c -P%c%c%c\n",
+					  hc, rhk, sc, rsk, vc, rvk,
+					  hi?'1':'0', si?'1':'0', vi?'1':'0',
+					  hl?'1':'0', sl?'1':'0', vl?'1':'0',
+					  hp?'1':'0', sp?'1':'0', vp?'1':'0');
+				  TargaAddComment(th, tmpbuf1);
+
+				  if (deffilename) {
+				    if (!(infile=fopen(deffilename, "r"))) perror(deffilename);
+				    else {
+				      if (fscanf(infile, "%60Lf\n", &def_x) != 1) {
+					perror("fscanf()");
+					return -2;
+				      }
+				      if (fscanf(infile, "%60Lf\n", &def_y) != 1) {
+					perror("fscanf()");
+					return -2;
+				      }
+				      if (fscanf(infile, "%60Lf\n", &def_dx) != 1) {
+					perror("fscanf()");
+					return -2;
+				      }
+				      fclose(infile);
+				      sprintf(tmpbuf1, "x=%.50Lg", def_x);
+				      TargaAddComment(th, tmpbuf1);
+				      sprintf(tmpbuf1, "y=%.50Lg", def_y);
+				      TargaAddComment(th, tmpbuf1);
+				      sprintf(tmpbuf1, "dx=%.50Lg", def_dx);
+				      TargaAddComment(th, tmpbuf1);
+				    }
+				  }
+
+
+				  pixels=blackpixels=0;
+
+				  for (y=0; y<height; y++) {
+				    fprintf(stderr,"  Line: %d\r",y);
+				    for (x=0; x<width; x++) {
+				      unsigned int colornum=buffer[x+y*width];
+				      if (colornum == mival) {
+					r = 0;
+					g = 0;
+					b = 0;
+				      } else {
+#ifndef BW
+					double intgr;
+					double span=(hival-loval);
+					h=s=v=(colornum-loval) % (int)span;
+					if (hl) h=logl(h)/logl(span); else h /= span;
+					if (sl) s=logl(s)/logl(span); else s /= span;
+					if (vl) v=logl(v)/logl(span); else v /= span;
+					h=modf(hc + hk * h, &intgr);
+					if (hi) h=1-h;
+					s=modf(sc + sk * s, &intgr);
+					if (si) s=1-s;
+					v=modf(vc + vk * v, &intgr);
+					if (vi) v=1-v;
+#else
+					h=v=1;s=0;
+#endif
+					hsv2rgb(h,s,v,&r,&g,&b);
+					if (v < 0.15) blackpixels++;
+					pixels++;
+				      }
+				      TargaWrite(th, r, g, b);
+				    }
+				  }
+				  TargaFinish(th);
+				  TargaClose(th);
+				  if ((double)blackpixels/(double)pixels > 0.97) {
+				    fprintf(stderr, "Mostly black!\n");
+				    unlink(currentoutfilename);
+				  }
+				  if (scriptfilename) {
+				    if (!fork()) {
+				      execl(scriptfilename, scriptfilename, currentoutfilename, NULL);
+				      return 0;
+				    }
+				  }
+				} else {
+				  printf("Skipping...\n");
+				}
 			      }
 			    }
-			    TargaFinish(th);
-			    TargaClose(th);
-			    if ((double)blackpixels/(double)pixels > 0.97) {
-			      fprintf(stderr, "Mostly black!\n");
-			      unlink(currentoutfilename);
-			    }
-			    if (scriptfilename) {
-			      if (!fork()) {
-				execl(scriptfilename, scriptfilename, currentoutfilename, NULL);
-				return 0;
-			      }
-			    }
-			  } else {
-			    printf("Skipping...\n");
 			  }
 			}
 		      }
