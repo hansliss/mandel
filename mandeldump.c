@@ -420,7 +420,7 @@ int main(int argc,char *argv[])
    case 'D': minprec=1; break;
    case 'L': minprec=2; break;
    case 'G': minprec=3; break;
-   case 'g': usegmp=1;
+   case 'g': usegmp=1; break;
    case 'X': if (!(xmlfile=fopen(optarg, "w"))) { perror(optarg); return -2; } break;
    default:
      usage(argv[0]);
