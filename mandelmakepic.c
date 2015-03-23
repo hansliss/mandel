@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdint.h>
+#include <libgen.h>
 #include <math.h>
 #include <time.h>
 #include <sys/types.h>
@@ -69,7 +70,7 @@ void rgb2hsv(byte r,byte g,byte b,float *h,float *s,float *v)
 	*h=bc-gc;
       else if (gv==max)
 	*h=2+rc-bc;
-      else if (bv==max)
+      else /* if (bv==max) */
 	*h=4+gc-rc;
       (*h)/=6;
       if ((*h)<0)
@@ -105,6 +106,21 @@ long rgb2cnum(byte r,byte g,byte b)
   return ((long)v)|((long)h);
 }
 
+void mkdirp(char *path) {
+  char *p=strdup(path);
+  struct stat statbuf;
+  if (strlen(p) > 0) {
+    if (stat(p, &statbuf) != 0) {
+      char *ptmp=strdup(p);
+      mkdirp(dirname(ptmp));
+      free(ptmp);
+      fprintf(stderr, "Creating directory %s\n", p);
+      mkdir(p, 07777);
+    }
+  }
+  free(p);
+}
+
 void usage(char *progname) {
   fprintf(stderr, "Usage: %s -i <infile.mdump> -o <outfile.tga> [-d <deffile.def>] [-m <bailout>] [-t <norm. threshold>]\n", progname);
   fprintf(stderr, "\t[-H <h offset>] [-h <h factor>] [-S <s offset>] [-s <s factor>] [-V <v offset>] [-v <v factor>]\n");
@@ -127,7 +143,7 @@ int main(int argc, char *argv[])
   unsigned int width, height, *buffer, i, j, *hist, vmax, nmax, n, looping=0;
   unsigned long wtmp, htmp;
   unsigned long loval, hival, maxiter, mival=1048576L, hival_threshold=2;
-  unsigned long pixels=0, blackpixels=0;
+  unsigned long pixels=0, blackpixels=0, whitepixels=0;
   int x, y;
 
   long double hc=0.66, hk, sc=0, sk, vc=0, vk, hcs=0.66, scs=0, vcs=0, hcdiff=0, scdiff=0, vcdiff=0, rhk, rsk, rvk;
@@ -364,8 +380,14 @@ int main(int argc, char *argv[])
 				skip=0;
 
 				if (looping) {
-				  sprintf(currentoutfilename, "%s_H%Lg_h%Lg_S%Lg_s%Lg_V%Lg_v%Lg_I%d%d%d_L%d%d%d_P%d%d%d.tga", outfilename, hc, rhk, sc, rsk, vc, rvk, hi, si, vi, hl, sl, vl, hp, sp, vp);
-				  printf("%s\n", currentoutfilename);
+				  sprintf(currentoutfilename, "%Lg/%Lg/%Lg/I%d%d%d/L%d%d%d/P%d%d%d/%s.tga", rhk, rsk, rvk, hi, si, vi, hl, sl, vl, hp, sp, vp, outfilename);
+				  char *tmpfilename = strdup(currentoutfilename);
+				  char *dirn=dirname(tmpfilename);
+				  if (stat(dirn, &statbuf) != 0) {
+				    mkdirp(dirn);
+				  }
+				  free(tmpfilename);
+				  printf("%s\n", currentoutfilename); fflush(stdout);
 				  if (stat(currentoutfilename, &statbuf) == 0) {
 				    skip=1;
 				  }
@@ -417,7 +439,7 @@ int main(int argc, char *argv[])
 				  }
 
 
-				  pixels=blackpixels=0;
+				  pixels=blackpixels=whitepixels=0;
 
 				  for (y=0; y<height; y++) {
 				    fprintf(stderr,"  Line: %d\r",y);
@@ -446,6 +468,7 @@ int main(int argc, char *argv[])
 #endif
 					hsv2rgb(h,s,v,&r,&g,&b);
 					if (v < 0.15) blackpixels++;
+					if (v > 0.95) whitepixels++;
 					pixels++;
 				      }
 				      TargaWrite(th, r, g, b);
@@ -453,9 +476,11 @@ int main(int argc, char *argv[])
 				  }
 				  TargaFinish(th);
 				  TargaClose(th);
-				  if ((double)blackpixels/(double)pixels > 0.97) {
-				    fprintf(stderr, "Mostly black!\n");
-				    unlink(currentoutfilename);
+				  if ((double)blackpixels/(double)pixels > 0.97 ||
+				      (double)whitepixels/(double)pixels > 0.97) {
+				    fprintf(stderr, "Mostly black or mostly white!");
+				    if (!truncate(currentoutfilename, 0)) fprintf(stderr," Truncated!\n");
+				    else fprintf(stderr, "Failed to truncate!");
 				  }
 				  if (scriptfilename) {
 				    if (!fork()) {
