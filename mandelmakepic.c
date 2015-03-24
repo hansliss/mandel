@@ -140,7 +140,8 @@ int main(int argc, char *argv[])
 {
   FILE *infile;
   int skip;
-  unsigned int width, height, *buffer, i, j, *hist, vmax, nmax, n, looping=0;
+  unsigned long width, height, i, j, n;
+  unsigned int *buffer, *hist, vmax, nmax, looping=0;
   unsigned long wtmp, htmp;
   unsigned long loval, hival, maxiter, mival=1048576L, hival_threshold=2;
   unsigned long pixels=0, blackpixels=0, whitepixels=0;
@@ -270,21 +271,20 @@ int main(int argc, char *argv[])
   }
   width=ntohl(wtmp);
   height=ntohl(htmp);
-  printf("[%d x %d]\n", width, height);
+  printf("[%ld x %ld]\n", width, height);
   if (!(buffer=(unsigned int *)malloc(width*height*sizeof(unsigned int)))) {
     perror("malloc()");
     return -3;
   }
   if ((n=fread(buffer, sizeof(unsigned int), width*height, infile)) != width*height) {
     height=n/width;
-    printf("fread() returned %u bytes. height is %u\n", n, height);
+    printf("fread() returned %lu bytes. height is %lu\n", n, height);
     /*    return -4;*/
   }
 
   fclose(infile);
 
   for (i=0; i<n; i++) buffer[i]=ntohl(buffer[i]);
-
   vmax=0;
   maxiter=0;
   for (y=0; y<height; y++)

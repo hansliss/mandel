@@ -256,10 +256,10 @@ void quadsplit(workitem *stack, workitem current) {
   int xm=(current->x0 + current->x1) / 2;
   int ym=(current->y0 + current->y1) / 2;
   fprintf(stderr, "Splitting (%d,%d) - (%d,%d) into four parts\n", current->x0, current->y0, current->x1, current->y1);
-  pushwork(stack, current->x0, current->y0, xm, ym, 0);
-  pushwork(stack, xm + 1, current->y0, current->x1, ym, 0);
-  pushwork(stack, current->x0, ym + 1, xm, current->y1, 0);
   pushwork(stack, xm + 1, ym + 1, current->x1, current->y1, 0);
+  pushwork(stack, current->x0, ym + 1, xm, current->y1, 0);
+  pushwork(stack, xm + 1, current->y0, current->x1, ym, 0);
+  pushwork(stack, current->x0, current->y0, xm, ym, 0);
 }
 
 int main(int argc,char *argv[]) {
@@ -274,6 +274,8 @@ int main(int argc,char *argv[]) {
   FILE *deffile, *dumpfile;
 
   unsigned long wtmp, htmp;
+
+  mpf_t gcentx, gcenty, gdx;
  
   static workitem workstack=NULL, current;
 
@@ -312,12 +314,25 @@ int main(int argc,char *argv[]) {
       return -1;
     }
   
-  if (fscanf(deffile,"%30Lf\n",&centx) < 1 ||
+ mpf_init(gcentx);
+ mpf_init(gcenty);
+ mpf_init(gdx);
+ gmp_fscanf(deffile,"%Fg\n",gcentx);
+ gmp_fscanf(deffile,"%Fg\n",gcenty);
+ gmp_fscanf(deffile,"%Fg\n",gdx);
+
+ centx=mpf_get_d(gcentx);
+ centy=mpf_get_d(gcenty);
+ dx=mpf_get_d(gdx);
+
+ /*
+   if (fscanf(deffile,"%30Lf\n",&centx) < 1 ||
       fscanf(deffile,"%30Lf\n",&centy) < 1 ||
       fscanf(deffile,"%30Lf\n",&dx) < 1) {
     fprintf(stderr, "Error reading %s\n", deffilename);
     exit(-2);
-  }
+    }
+*/
   fclose(deffile);
 
   if (!(dumpfile=fopen(dumpfilename, "w"))) {
