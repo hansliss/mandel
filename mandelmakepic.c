@@ -467,8 +467,8 @@ int main(int argc, char *argv[])
 					h=v=1;s=0;
 #endif
 					hsv2rgb(h,s,v,&r,&g,&b);
-					if (v < 0.15) blackpixels++;
-					if (v > 0.95) whitepixels++;
+					if (v < 0.05) blackpixels++;
+					if (v > 0.95 && s < 0.05) whitepixels++;
 					pixels++;
 				      }
 				      TargaWrite(th, r, g, b);
