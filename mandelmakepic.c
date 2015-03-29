@@ -127,7 +127,7 @@ void usage(char *progname) {
   fprintf(stderr, "\t[-I <inversion spec for h, s and v value: 3 characters, where \"1\" means corr. value is inverted>]\n");
   fprintf(stderr, "\t[-L <log spec for h, s and v value: 3 characters, where \"1\" means we use log() of the corr. value>]\n");
   fprintf(stderr, "\t[-P <prop spec for h, s and v value: 3 characters, where \"1\" means factors are proportional>]\n");
-  fprintf(stderr, "\t[-D (build directory structure)]\n");
+  fprintf(stderr, "\t[-R (remove more or less all-black or all-white images)] [-D (build directory structure)]\n");
 }
 
 void handler(int s)
@@ -148,6 +148,7 @@ int main(int argc, char *argv[])
   unsigned long loval, hival, maxiter, mival=1048576L, hival_threshold=2;
   unsigned long pixels=0, blackpixels=0, whitepixels=0;
   int x, y;
+  int remove_blacks=0;
 
   long double hc=0.66, hk, sc=0, sk, vc=0, vk, hcs=0.66, scs=0, vcs=0, hcdiff=0, scdiff=0, vcdiff=0, rhk, rsk, rvk;
   long double hks=3.8, sks=5, vks=0, hdiff=0, sdiff=0, vdiff=0;
@@ -176,7 +177,7 @@ int main(int argc, char *argv[])
 
   signal(SIGCHLD, handler);
 
-  while ((o=getopt(argc, argv, "i:o:d:m:t:H:h:V:v:S:s:I:L:P:C:")) != -1) {
+  while ((o=getopt(argc, argv, "i:o:d:m:t:H:h:V:v:S:s:I:L:P:C:RD")) != -1) {
     switch (o) {
     case 'i': infilename=optarg; break;
     case 'o': outfilename=optarg; break;
@@ -184,6 +185,7 @@ int main(int argc, char *argv[])
     case 'm': mival=atoi(optarg); break;
     case 't': hival_threshold=atoi(optarg); break;
     case 'C': scriptfilename=optarg; break;
+    case 'R': remove_blacks=1; break;
     case 'D': build_subdirs=1; break;
     case 'H':
       if (sscanf(optarg, "%Lf,%i,%Lf", &hcs, &hcsteps, &hcdiff) != 3) {
@@ -486,8 +488,10 @@ int main(int argc, char *argv[])
 				  if ((double)blackpixels/(double)pixels > 0.97 ||
 				      (double)whitepixels/(double)pixels > 0.97) {
 				    fprintf(stderr, "Mostly black or mostly white!");
-				    if (!truncate(currentoutfilename, 0)) fprintf(stderr," Truncated!\n");
-				    else fprintf(stderr, "Failed to truncate!");
+				    if (remove_blacks) {
+				      if (!truncate(currentoutfilename, 0)) fprintf(stderr," Truncated!\n");
+				      else fprintf(stderr, "Failed to truncate!\n");
+				    } else fprintf(stderr, "Leaving.\n");
 				  }
 				  if (scriptfilename) {
 				    if (!fork()) {
