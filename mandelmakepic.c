@@ -127,6 +127,7 @@ void usage(char *progname) {
   fprintf(stderr, "\t[-I <inversion spec for h, s and v value: 3 characters, where \"1\" means corr. value is inverted>]\n");
   fprintf(stderr, "\t[-L <log spec for h, s and v value: 3 characters, where \"1\" means we use log() of the corr. value>]\n");
   fprintf(stderr, "\t[-P <prop spec for h, s and v value: 3 characters, where \"1\" means factors are proportional>]\n");
+  fprintf(stderr, "\t[-D (build directory structure)]\n");
 }
 
 void handler(int s)
@@ -140,6 +141,7 @@ int main(int argc, char *argv[])
 {
   FILE *infile;
   int skip;
+  int build_subdirs=0;
   unsigned long width, height, i, j, n;
   unsigned int *buffer, *hist, vmax, nmax, looping=0;
   unsigned long wtmp, htmp;
@@ -182,6 +184,7 @@ int main(int argc, char *argv[])
     case 'm': mival=atoi(optarg); break;
     case 't': hival_threshold=atoi(optarg); break;
     case 'C': scriptfilename=optarg; break;
+    case 'D': build_subdirs=1; break;
     case 'H':
       if (sscanf(optarg, "%Lf,%i,%Lf", &hcs, &hcsteps, &hcdiff) != 3) {
 	hcsteps=1; hcdiff=0;
@@ -380,13 +383,17 @@ int main(int argc, char *argv[])
 				skip=0;
 
 				if (looping) {
-				  sprintf(currentoutfilename, "%Lg/%Lg/%Lg/I%d%d%d/L%d%d%d/P%d%d%d/%s.tga", rhk, rsk, rvk, hi, si, vi, hl, sl, vl, hp, sp, vp, outfilename);
-				  char *tmpfilename = strdup(currentoutfilename);
-				  char *dirn=dirname(tmpfilename);
-				  if (stat(dirn, &statbuf) != 0) {
-				    mkdirp(dirn);
+				  if (build_subdirs) {
+				    sprintf(currentoutfilename, "%Lg_%Lg/%Lg_%Lg/%Lg_%Lg/I%d%d%d/L%d%d%d/P%d%d%d/%s.tga", hc, rhk, sc, rsk, vc, rvk, hi, si, vi, hl, sl, vl, hp, sp, vp, outfilename);
+				    char *tmpfilename = strdup(currentoutfilename);
+				    char *dirn=dirname(tmpfilename);
+				    if (stat(dirn, &statbuf) != 0) {
+				      mkdirp(dirn);
+				    }
+				    free(tmpfilename);
+				  } else {
+				    sprintf(currentoutfilename, "%s_%Lg_%Lg_%Lg_%Lg_%Lg_%Lg_I%d%d%d_L%d%d%d_P%d%d%d.tga", outfilename, hc, rhk, sc, rsk, vc, rvk, hi, si, vi, hl, sl, vl, hp, sp, vp);
 				  }
-				  free(tmpfilename);
 				  printf("%s\n", currentoutfilename); fflush(stdout);
 				  if (stat(currentoutfilename, &statbuf) == 0) {
 				    skip=1;

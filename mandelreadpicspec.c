@@ -14,7 +14,7 @@
 #include "targa.h"
 
 void usage(char *progname) {
-  fprintf(stderr, "Usage: %s -i <infile.tga> -o <outfile.xml>\n", progname);
+  fprintf(stderr, "Usage: %s -i <infile.tga> [-o <outfile.xml>] [-D (debug)]\n", progname);
 }
 
 char **tokenize(char *string, int *count) {
@@ -64,7 +64,7 @@ void xmlwrite(FILE *xmlfile, long double hc, long double sc, long double vc,
 int main(int argc, char *argv[])
 {
   TargaHandle th;
-  int o, i;
+  int o, i, debug=0;
   char **c_argv;
   int c_argc;
 
@@ -75,14 +75,15 @@ int main(int argc, char *argv[])
   
   char *infilename=NULL, *outfilename=NULL;
   FILE *outfile;
-  while ((o=getopt(argc, argv, "i:o:")) != -1) {
+  while ((o=getopt(argc, argv, "i:o:D")) != -1) {
     switch (o) {
     case 'i': infilename=optarg; break;
     case 'o': outfilename=optarg; break;
+    case 'D': debug=1; break;
     default: usage(argv[0]); return -1; break;
     }
   }
-  if (!infilename || !outfilename) {
+  if (!infilename) {
     usage(argv[0]);
     return -1;
   }
@@ -92,15 +93,19 @@ int main(int argc, char *argv[])
     return -2;
   }
 
-  printf("Size=(%d,%d), Author=\"%s\", Jobname=\"%s\".\n", th->width, th->height, th->author, th->jobname);
-  if (th->comment1) printf("Comment1=\"%s\"\n", th->comment1);
-  if (th->comment2) printf("Comment2=\"%s\"\n", th->comment2);
-  if (th->comment3) printf("Comment3=\"%s\"\n", th->comment3);
-  if (th->comment4) printf("Comment4=\"%s\"\n", th->comment4);
+  if (debug) {
+    printf("Size=(%d,%d), Author=\"%s\", Jobname=\"%s\".\n", th->width, th->height, th->author, th->jobname);
+    if (th->comment1) printf("Comment1=\"%s\"\n", th->comment1);
+    if (th->comment2) printf("Comment2=\"%s\"\n", th->comment2);
+    if (th->comment3) printf("Comment3=\"%s\"\n", th->comment3);
+    if (th->comment4) printf("Comment4=\"%s\"\n", th->comment4);
+  }
   c_argv = tokenize(th->comment1, &c_argc);
-  printf("%d tokens\n", c_argc);
-  for (i=0; i<c_argc; i++) {
-    printf("Token %d: \"%s\"\n", i, c_argv[i]);
+  if (debug) {
+    printf("%d tokens\n", c_argc);
+    for (i=0; i<c_argc; i++) {
+      printf("Token %d: \"%s\"\n", i, c_argv[i]);
+    }
   }
   while ((o=getopt(c_argc, c_argv, "H:h:V:v:S:s:I:L:P:")) != -1) {
     switch (o) {
@@ -153,14 +158,24 @@ int main(int argc, char *argv[])
     }
   }
 
-  printf("H:[%Lg, %Lg%s%s%s], S:[%Lg, %Lg%s%s%s], V:[%Lg, %Lg%s%s%s]\n",
-	 hc, hk, hi?", inv":"", hl?", log":"", hp?", prop":"",
-	 sc, sk, si?", inv":"", sl?", log":"", sp?", prop":"",
-	 vc, vk, vi?", inv":"", vl?", log":"", vp?", prop":"");
+  if (debug) {
+    printf("H:[%Lg, %Lg%s%s%s], S:[%Lg, %Lg%s%s%s], V:[%Lg, %Lg%s%s%s]\n",
+	   hc, hk, hi?", inv":"", hl?", log":"", hp?", prop":"",
+	   sc, sk, si?", inv":"", sl?", log":"", sp?", prop":"",
+	   vc, vk, vi?", inv":"", vl?", log":"", vp?", prop":"");
+  }
   
   TargaClose(th);
-  outfile=fopen(outfilename, "w");
-  xmlwrite(outfile, hc, sc, vc, hk, sk, vk, hi, si, vi, hl, sl, vl, hp, sp, vp);
-  fclose(outfile);
+  if (outfilename != NULL) {
+    outfile=fopen(outfilename, "w");
+    xmlwrite(outfile, hc, sc, vc, hk, sk, vk, hi, si, vi, hl, sl, vl, hp, sp, vp);
+    fclose(outfile);
+  } else {
+    printf("-H %Lg -h %Lg -S %Lg -s %Lg -V %Lg -v %Lg -I %c%c%c -L %c%c%c -P %c%c%c\n",
+	   hc, hk, sc, sk, vc, vk,
+	   hi?'1':'0',si?'1':'0',vi?'1':'0',
+	   hl?'1':'0',sl?'1':'0',vl?'1':'0',
+	   hp?'1':'0',sp?'1':'0',vp?'1':'0');
+  }
   return 0;
 }
