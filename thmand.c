@@ -24,11 +24,12 @@ FILE *logfile;
 #define FLOAT long double
 
 #define MAX_CHECK_SIZE 1000
-#define MAX_RENDER_SIZE 10
+#define MAX_RENDER_SIZE 50
 
 unsigned long width=1024;
 unsigned long height=1024;
 unsigned long maxiter=1048576L;
+char logprefix[128];
 
 void *run(void *cfg);
 
@@ -255,7 +256,7 @@ void usage(char *progname) {
 void quadsplit(workitem *stack, workitem current) {
   int xm=(current->x0 + current->x1) / 2;
   int ym=(current->y0 + current->y1) / 2;
-  fprintf(stderr, "Splitting (%d,%d) - (%d,%d) into four parts\n", current->x0, current->y0, current->x1, current->y1);
+  fprintf(stderr, "%sSplitting (%d,%d) - (%d,%d) into four parts\n", logprefix, current->x0, current->y0, current->x1, current->y1);
   pushwork(stack, xm + 1, ym + 1, current->x1, current->y1, 0);
   pushwork(stack, current->x0, ym + 1, xm, current->y1, 0);
   pushwork(stack, xm + 1, current->y0, current->x1, ym, 0);
@@ -266,7 +267,7 @@ int main(int argc,char *argv[]) {
   static struct taskconfig *cfg=NULL;
   static pthread_t *threads=NULL;
 
-  int i, r, nthreads=0, ncores=0;
+  int i, r, nthreads=0, ncores=1;
 
   int o;
 
@@ -284,8 +285,9 @@ int main(int argc,char *argv[]) {
 
   long totpix=(long)width*height;
   long totpix_done=0;
-  double totpix_done_percent;
+  double totpix_done_percent, totpix_done_lastpercent=0;
 
+  snprintf(logprefix, sizeof(logprefix), "thmand: ");
   while ((o=getopt(argc, argv, "d:o:p:w:h:m:")) != EOF) {
     switch (o) {
     case 'd': deffilename=optarg; break;
@@ -380,7 +382,7 @@ int main(int argc,char *argv[]) {
 	cfg[i].result = &result;
 	cfg[i].lock = &lock;
 	if (!pthread_create(&(threads[i]), NULL, run_checkfilled, (void*)&(cfg[i]))) nthreads++;
-	fprintf(stderr, "Started run_checkfilled (thread %d) for (%d;%d),(%d;%d)     \n", i,
+	fprintf(stderr, "%sStarted run_checkfilled (thread %d) for (%d;%d),(%d;%d)     \n", logprefix, i,
 		current->x0, current->y0, current->x1, current->y1);
       } else if (current->x1 - current->x0 > MAX_RENDER_SIZE &&
 		 current->y1 - current->y0 > MAX_RENDER_SIZE) {
@@ -398,7 +400,7 @@ int main(int argc,char *argv[]) {
 	cfg[i].result = &result;
 	cfg[i].lock = &lock;
 	if (!pthread_create(&(threads[i]), NULL, run_dowork, (void*)&(cfg[i]))) nthreads++;
-	fprintf(stderr, "Started run_dowork (thread %d) for (%d;%d),(%d;%d)     \n", i, 
+	fprintf(stderr, "%sStarted run_dowork (thread %d) for (%d;%d),(%d;%d)     \n", logprefix, i, 
 		current->x0, current->y0, current->x1, current->y1);
       }
       free(current);
@@ -407,7 +409,7 @@ int main(int argc,char *argv[]) {
     for (i = 0; i < ncores; i++) {
       if (cfg[i].taskid >= 0 && pthread_kill(threads[i], 0) != 0) {
 	pthread_join(threads[i], (void **)&r);
-	fprintf(stderr, "Thread %d terminated                          \n", i);
+	fprintf(stderr, "%sThread %d terminated                          \n", logprefix, i);
 	cfg[i].taskid = -1;
 	nthreads--;
 	if (!(cfg[i].done)) {
@@ -433,7 +435,11 @@ int main(int argc,char *argv[]) {
 	*/
 	free(res);
       }
-      fprintf(stderr, "%.2g%% done, %d threads\n", totpix_done_percent, nthreads);
+      if ((int)(totpix_done_percent*10) > (int)(totpix_done_lastpercent*10)) {
+	snprintf(logprefix, sizeof(logprefix), "thmand: %.2g%% done, %d threads, ", totpix_done_percent, nthreads);
+	fprintf(stderr, "%.2g%% done, %d threads\n", totpix_done_percent, nthreads);
+	totpix_done_lastpercent=totpix_done_percent;
+      }
       pthread_mutex_unlock(&lock);
     }
     if (nthreads == ncores || !workstack) usleep(200);
