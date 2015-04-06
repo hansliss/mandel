@@ -285,7 +285,7 @@ int main(int argc,char *argv[]) {
 
   long totpix=(long)width*height;
   long totpix_done=0;
-  double totpix_done_percent, totpix_done_lastpercent=0;
+  double totpix_done_percent=0, totpix_done_lastpercent=0;
 
   snprintf(logprefix, sizeof(logprefix), "thmand: ");
   while ((o=getopt(argc, argv, "d:o:p:w:h:m:")) != EOF) {
