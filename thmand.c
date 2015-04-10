@@ -400,7 +400,7 @@ int main(int argc,char *argv[]) {
       file_handling=THMAND_MODE_CONTINUE;
     }
   } else {
-    if (!(dumpfile=fopen(dumpfilename, "w"))) {
+    if (!(dumpfile=fopen(dumpfilename, "w+"))) {
       perror(dumpfilename);
       return -2;
     }
