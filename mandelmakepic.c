@@ -16,6 +16,9 @@
 
 typedef unsigned char byte;
 
+static long minusone_long=-1;
+static unsigned long *minusone=(unsigned long*)(&minusone_long);
+
 void hsv2rgb(float H,float S,float V,byte *R,byte *G,byte *B)
 {
   int i;
@@ -293,13 +296,17 @@ int main(int argc, char *argv[])
 
   fclose(infile);
 
-  for (i=0; i<n; i++) buffer[i]=ntohl(buffer[i]);
+  for (i=0; i<n; i++) {
+    // Not taking any chances with -1 and unsigned longs... :)
+    if (buffer[i] == *minusone) buffer[i] = -1;
+    else buffer[i]=ntohl(buffer[i]);
+  }
   vmax=0;
   maxiter=0;
   for (y=0; y<height; y++)
     for (x=0; x<width; x++){
       /*      printf("0x%04X\n", buffer[x + y*width]);*/
-      if (buffer[x + y*width] != mival && buffer[x + y*width] > vmax) vmax=buffer[x + y*width];
+      if (buffer[x + y * width] != -1 && buffer[x + y*width] != mival && buffer[x + y*width] > vmax) vmax=buffer[x + y*width];
     }
   if (!(hist=(unsigned int *)malloc((vmax+1) * sizeof(unsigned int)))) {
     perror("malloc()");
@@ -309,10 +316,12 @@ int main(int argc, char *argv[])
   memset(hist, 0, (vmax+1) * sizeof(unsigned int));
   for (y=0; y<height; y++)
     for (x=0; x<width; x++) {
-      if (buffer[x + y*width] != mival)
-	hist[buffer[x + y*width]]++;
-      else
-	maxiter++;
+      if (buffer[x + y * width] != -1) {
+	if (buffer[x + y*width] != mival)
+	  hist[buffer[x + y*width]]++;
+	else
+	  maxiter++;
+      }
     }
   for (j=vmax; j>0 && hist[j]<hival_threshold; j--);
   for (i=0; i<=j; i++)
@@ -464,7 +473,11 @@ int main(int argc, char *argv[])
 				    fprintf(stderr,"  Line: %d\r",y);
 				    for (x=0; x<width; x++) {
 				      unsigned int colornum=buffer[x+y*width];
-				      if (colornum == mival) {
+				      if (colornum == -1) {
+					r=255;
+					g=0;
+					b=0;
+				      } else if (colornum == mival) {
 					r = 0;
 					g = 0;
 					b = 0;

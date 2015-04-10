@@ -1,3 +1,5 @@
+#define _FILE_OFFSET_BITS 64
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <fcntl.h>
@@ -18,6 +20,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <time.h>
+#include <sys/mman.h>
 
 FILE *logfile;
 
@@ -26,10 +29,21 @@ FILE *logfile;
 #define MAX_CHECK_SIZE 1000
 #define MAX_RENDER_SIZE 50
 
+#define THMAND_MODE_INITIALIZE 0
+#define THMAND_MODE_CONTINUE 1
+#define THMAND_MODE_UPDATE 2
+
 unsigned long width=1024;
 unsigned long height=1024;
 unsigned long maxiter=1048576L;
 char logprefix[128];
+
+static int *dumpbuffer=NULL;
+static long totpix_done=0;
+static long lasttotpix_done=0;
+
+static int minusone_int=-1;
+static unsigned int *minusone=(unsigned int*)(&minusone_int);
 
 void *run(void *cfg);
 
@@ -79,20 +93,14 @@ char *make_message(const char *fmt, va_list *ap) {
 
 void debug(const char *fmt, ...) {
   /*
-  va_list ap;
-  va_start(ap, fmt);
-  char *msg = make_message(fmt, &ap);
-  va_end(ap);
-  fprintf(stderr, "%s\n", msg);
-  free(msg);
+    va_list ap;
+    va_start(ap, fmt);
+    char *msg = make_message(fmt, &ap);
+    va_end(ap);
+    fprintf(stderr, "%s\n", msg);
+    free(msg);
   */
 }
-
-typedef struct finished_point_s {
-  unsigned int x, y;
-  unsigned long val;
-  struct finished_point_s *next;
-} *finished_point;
 
 struct taskconfig {
   int taskid;
@@ -101,22 +109,9 @@ struct taskconfig {
   unsigned int x1;
   unsigned int y1;
   unsigned long maxiter;
-  finished_point *result;
   int done;
   pthread_mutex_t *lock;
 };
-
-void pushres(finished_point *list, int x, int y, unsigned int val) {
-  finished_point tmp=*list;
-  (*list) = (finished_point)malloc(sizeof(struct finished_point_s));
-  if ((*list) == NULL) {
-    fprintf(stderr, "malloc() failed\n"); exit(1);
-  }
-  (*list)->x = x;
-  (*list)->y = y;
-  (*list)->val = val;
-  (*list)->next = tmp;
-}
 
 typedef struct workitem_s {
   unsigned int x0;
@@ -161,19 +156,19 @@ workitem popwork(workitem *stack) {
 }
 
 unsigned long mandel(FLOAT cx, FLOAT cy, unsigned long maxiter) {
- unsigned long i=maxiter;
- FLOAT zx=cx,zy=cy,zx2=cx*cx,zy2=cy*cy;
- while((i>0)&&(zx2+zy2 < 4.0)) {
-	zy=2*zx*zy + cy;
-	zx=zx2-zy2 + cx;
-	zx2=zx*zx;
-	zy2=zy*zy;
-	i--;
- }
+  unsigned long i=maxiter;
+  FLOAT zx=cx,zy=cy,zx2=cx*cx,zy2=cy*cy;
+  while((i>0)&&(zx2+zy2 < 4.0)) {
+    zy=2*zx*zy + cy;
+    zx=zx2-zy2 + cx;
+    zx2=zx*zx;
+    zy2=zy*zy;
+    i--;
+  }
 #ifdef DEBUG
- fprintf(logfile,"mandel=%u, maxiter=%u\n",i,maxiter);
+  fprintf(logfile,"mandel=%u, maxiter=%u\n",i,maxiter);
 #endif
- return maxiter-i;
+  return maxiter-i;
 }
  
 void *run_checkfilled(void *cfgi) {
@@ -181,6 +176,7 @@ void *run_checkfilled(void *cfgi) {
   int filled=1;
   FLOAT xval,yval, xval1, yval1;
   int x0, x1, y0, y1;
+  int changedpixels=0;
   struct taskconfig *cfg = (struct taskconfig *)cfgi;
 
   x0 = cfg->x0;
@@ -190,8 +186,18 @@ void *run_checkfilled(void *cfgi) {
   yval=YVAL(y0);
   yval1=YVAL(y1);
   for (x = x0; x<= x1; x++) {
+    int v1 = dumpbuffer[4 + x + y0 * width];
+    int v2 = dumpbuffer[4 + x + y1 * width];
     xval=XVAL(x);
-    if (mandel(xval, yval, cfg->maxiter) < maxiter || mandel(xval, yval1, cfg->maxiter) < maxiter) {
+    if (v1 == *minusone) {
+      v1=mandel(xval, yval, cfg->maxiter);
+      dumpbuffer[4 + x + y0 * width] = htonl(v1);
+    } else v1=ntohl(v1);
+    if (v2 == *minusone) {
+      v2=mandel(xval, yval1, cfg->maxiter);
+      dumpbuffer[4 + x + y1 * width] = htonl(v2);
+    } else v2=ntohl(v2);
+    if (v1 < cfg->maxiter || v2 < cfg->maxiter) {
       filled=0;
       break;
     }
@@ -200,17 +206,34 @@ void *run_checkfilled(void *cfgi) {
     xval=XVAL(x0);
     xval1=XVAL(x1);
     for (y = y0; y<= y1; y++) {
+      int v1 = dumpbuffer[4 + x0 + y * width];
+      int v2 = dumpbuffer[4 + x1 + y * width];
       yval=YVAL(y);
-      if (mandel(xval, yval, cfg->maxiter) < maxiter || mandel(xval1, yval, cfg->maxiter) < maxiter) {
+      if (v1 == *minusone) {
+	v1=mandel(xval, yval, cfg->maxiter);
+	dumpbuffer[4 + x0 + y * width] = htonl(v1);
+      } else v1 = ntohl(v1);
+      if (v2 == *minusone) {
+	v2=mandel(xval1, yval, cfg->maxiter);
+	dumpbuffer[4 + x1 + y * width] = htonl(v2);
+      } else v2 = ntohl(v2);
+      if (v1 < cfg->maxiter || v2 < cfg->maxiter) {
 	filled=0;
 	break;
       }
     }
     if (filled) {
+      for (x = x0; x <= x1; x++) {
+	for (y = y0; y <= y1; y++) {
+	  int val=dumpbuffer[4 + x + y * width];
+	  if (val == *minusone) {
+	    dumpbuffer[4 + x + y * width] = htonl(cfg->maxiter);
+	  }
+	  changedpixels++;
+	}
+      }
       pthread_mutex_lock(cfg->lock);
-      for (x = x0; x <= x1; x++)
-	for (y = y0; y <= y1; y++)
-	  pushres(cfg->result, x, y, maxiter);
+      totpix_done += changedpixels;
       pthread_mutex_unlock(cfg->lock);
       cfg->done = 1;
       return NULL;
@@ -223,7 +246,8 @@ void *run_dowork(void *cfgi) {
   unsigned int x,y;
   FLOAT xval,yval;
   int x0, x1, y0, y1;
-  unsigned long val;
+  int val;
+  int changedpixels=0;
   struct taskconfig *cfg = (struct taskconfig *)cfgi;
 
   x0 = cfg->x0;
@@ -234,14 +258,19 @@ void *run_dowork(void *cfgi) {
   for (y = y0; y <= y1; y++) {
     yval=YVAL(y);
     for (x = x0; x <= x1; x++) {
-      xval=XVAL(x);
-      val=mandel(xval, yval, cfg->maxiter);
-      pthread_mutex_lock(cfg->lock);
-      pushres(cfg->result, x, y, val);
-      pthread_mutex_unlock(cfg->lock);
+      val = dumpbuffer[4 + x + y * width];
+      if (val == *minusone) {
+	xval=XVAL(x);
+	val=mandel(xval, yval, cfg->maxiter);
+	dumpbuffer[4 + x + y * width] = htonl(val);
+      }
+      changedpixels++;
     }
   }
 
+  pthread_mutex_lock(cfg->lock);
+  totpix_done += changedpixels;
+  pthread_mutex_unlock(cfg->lock);
   cfg->done=1;
 
   return NULL;
@@ -267,25 +296,26 @@ int main(int argc,char *argv[]) {
   static struct taskconfig *cfg=NULL;
   static pthread_t *threads=NULL;
 
-  int i, r, nthreads=0, ncores=1;
+  int tempindex, r, nthreads=0, ncores=1, x, y, tmpval;
 
   int o;
 
   char *deffilename=NULL, *dumpfilename=NULL;
   FILE *deffile, *dumpfile;
+  struct stat fstatbuf;
 
-  unsigned long wtmp, htmp;
+  long wtmp, htmp;
 
   mpf_t gcentx, gcenty, gdx;
  
   static workitem workstack=NULL, current;
 
-  static finished_point result=NULL;
+  unsigned long filesize=0;
+  int file_handling=THMAND_MODE_INITIALIZE;
+
   static pthread_mutex_t lock;
 
   long totpix=(long)width*height;
-  long totpix_done=0;
-  double totpix_done_percent=0, totpix_done_lastpercent=0;
 
   snprintf(logprefix, sizeof(logprefix), "thmand: ");
   while ((o=getopt(argc, argv, "d:o:p:w:h:m:")) != EOF) {
@@ -316,38 +346,119 @@ int main(int argc,char *argv[]) {
       return -1;
     }
   
- mpf_init(gcentx);
- mpf_init(gcenty);
- mpf_init(gdx);
- gmp_fscanf(deffile,"%Fg\n",gcentx);
- gmp_fscanf(deffile,"%Fg\n",gcenty);
- gmp_fscanf(deffile,"%Fg\n",gdx);
+  mpf_init(gcentx);
+  mpf_init(gcenty);
+  mpf_init(gdx);
+  gmp_fscanf(deffile,"%Fg\n",gcentx);
+  gmp_fscanf(deffile,"%Fg\n",gcenty);
+  gmp_fscanf(deffile,"%Fg\n",gdx);
 
- centx=mpf_get_d(gcentx);
- centy=mpf_get_d(gcenty);
- dx=mpf_get_d(gdx);
+  centx=mpf_get_d(gcentx);
+  centy=mpf_get_d(gcenty);
+  dx=mpf_get_d(gdx);
 
- /*
-   if (fscanf(deffile,"%30Lf\n",&centx) < 1 ||
-      fscanf(deffile,"%30Lf\n",&centy) < 1 ||
-      fscanf(deffile,"%30Lf\n",&dx) < 1) {
+  /*
+    if (fscanf(deffile,"%30Lf\n",&centx) < 1 ||
+    fscanf(deffile,"%30Lf\n",&centy) < 1 ||
+    fscanf(deffile,"%30Lf\n",&dx) < 1) {
     fprintf(stderr, "Error reading %s\n", deffilename);
     exit(-2);
     }
-*/
+  */
   fclose(deffile);
 
-  if (!(dumpfile=fopen(dumpfilename, "w"))) {
-    perror(dumpfilename);
-    return -2;
+
+  if (stat(dumpfilename, &fstatbuf) == 0) {
+    filesize=fstatbuf.st_size;
+    if (!(dumpfile=fopen(dumpfilename, "r+"))) {
+      perror(dumpfilename);
+      return -2;
+    }
+    if (fread(&wtmp, sizeof(wtmp), 1, dumpfile) != 1) {
+      fprintf(stderr, "Error: File exists but no width/height.\n");
+      return -5;
+    }
+    if (fread(&htmp, sizeof(wtmp), 1, dumpfile) != 1) {
+      fprintf(stderr, "Error: File exists but no width/height.\n");
+      return -5;
+    }
+    wtmp=ntohl(wtmp);
+    htmp=ntohl(htmp);
+    if (wtmp != width || htmp != height) {
+      fprintf(stderr, "Existing file has different width/height (%ld,%ld). Aborting.\n", wtmp, htmp);
+      return -3;
+    }
+    if (filesize < sizeof(wtmp) + sizeof(htmp) + sizeof(int)*(width*height)) {
+      lseek(fileno(dumpfile), sizeof(wtmp) + sizeof(htmp) + sizeof(int)*(width*height-1), SEEK_SET);
+      tmpval=0;
+      if (write(fileno(dumpfile), &tmpval, sizeof(tmpval)) == -1) {
+	perror("write()");
+	return -5;
+      }
+      file_handling=THMAND_MODE_UPDATE;
+    } else {
+      file_handling=THMAND_MODE_CONTINUE;
+    }
+  } else {
+    if (!(dumpfile=fopen(dumpfilename, "w+"))) {
+      perror(dumpfilename);
+      return -2;
+    }
+    lseek(fileno(dumpfile), sizeof(wtmp) + sizeof(wtmp) + sizeof(int)*(width*height-1), SEEK_SET);
+    tmpval=0;
+    if (write(fileno(dumpfile), &tmpval, sizeof(tmpval)) == -1) {
+      perror("write()");
+      return -5;
+    }
+    file_handling=THMAND_MODE_INITIALIZE;
   }
 
-  wtmp=htonl(width);
-  htmp=htonl(height);
-  fwrite(&wtmp, sizeof(wtmp), 1, dumpfile);
-  fwrite(&htmp, sizeof(htmp), 1, dumpfile);
-
-  for (i=0; i<ncores; i++) cfg[i].taskid=-1;
+  if ((dumpbuffer=(int *)mmap(NULL,
+			      sizeof(wtmp) + sizeof(htmp) + 
+			      sizeof(int) * (width * height),
+			       PROT_READ|PROT_WRITE,
+			       MAP_SHARED,
+			       fileno(dumpfile),
+			       0)) == MAP_FAILED) {
+    perror("mmap()");
+    return 4;
+  }
+  switch (file_handling) {
+  case THMAND_MODE_INITIALIZE:
+    fprintf(stderr, "Initializing file...\n");
+    // Someone (me) made a mistake early on here, so the width and height
+    // are 64-bit values but are treated as 32-bit values in the dump file.
+    // This is why all address uses an offset of 4 ints (2 longs) instead of 2.
+    dumpbuffer[0]=htonl(width);
+    dumpbuffer[2]=htonl(height);
+    msync(&(dumpbuffer[0]), 4 * sizeof(int), MS_ASYNC);
+    for (y=0; y<height; y++) {
+      fprintf(stderr, "%d\r", y);
+      for (x=0; x<width; x++) {
+	dumpbuffer[4 + x + y * width] = *minusone;
+      }
+      msync(&(dumpbuffer[4 + y*width]), width * sizeof(int), MS_ASYNC);
+    }
+    fprintf(stderr, "Done.    \n");
+    break;
+  case THMAND_MODE_UPDATE:
+    fprintf(stderr, "Dump file is partially completed by an older version. Setting all zero values to -1...\n");
+    for (y=0; y<height; y++) {
+      fprintf(stderr, "%d\r", y);
+      for (x=0; x<width; x++) {
+	int val=ntohl(dumpbuffer[4 + x + y * width]);
+	if (val == 0)
+	  dumpbuffer[4 + x + y * width] = *minusone;
+      }
+      msync(&(dumpbuffer[4 + y * width]), width * sizeof(int), MS_ASYNC);
+    }
+    fprintf(stderr, "Done.    \n");
+    break;
+  default:
+    break;
+  }
+    
+  for (tempindex=0; tempindex<ncores; tempindex++) cfg[tempindex].taskid=-1;
 
   point_x0=centx-dx/2;
   point_x1=centx+dx/2;
@@ -357,92 +468,79 @@ int main(int argc,char *argv[]) {
 
   fprintf(stderr, "Current center is %20.20Lf, %20.20Lf, dx=%20.20Lf\n",centx,centy,dx);
   fprintf(stderr, "Corners are %20.20Lf, %20.20Lf  and  %20.20Lf, %20.20Lf\n",
-	 point_x0,point_y0,point_x1,point_y1);
+	  point_x0,point_y0,point_x1,point_y1);
   fprintf(stderr, "Maxiter is %ld\n", maxiter);
 
   pushwork(&workstack, 0, 0, width-1, height-1, 0);
 
   pthread_mutex_init(&lock, NULL);
-
-  while (nthreads > 0 || workstack || result) {
+ 
+  while (nthreads > 0 || workstack) {
     if (nthreads < ncores && (current = popwork(&workstack)) != NULL) {
-      if (current->x1 - current->x0 > MAX_CHECK_SIZE &&
-	  current->y1 - current->y0 > MAX_CHECK_SIZE) {
+      if ((1 + current->x1 - current->x0) > MAX_CHECK_SIZE &&
+	  (1 + current->y1 - current->y0) > MAX_CHECK_SIZE) {
 	quadsplit(&workstack, current);
       } else if (!current->checked) {
-	for (i=0; i<ncores; i++) if (cfg[i].taskid == -1) break;
-	if (i==ncores) {fprintf(stderr,"Fatal error\n"); return -100;}
-	cfg[i].taskid=i;
-	cfg[i].x0 = current->x0;
-	cfg[i].y0 = current->y0;
-	cfg[i].x1 = current->x1;
-	cfg[i].y1 = current->y1;
-	cfg[i].done = 0;
-	cfg[i].maxiter = maxiter;
-	cfg[i].result = &result;
-	cfg[i].lock = &lock;
-	if (!pthread_create(&(threads[i]), NULL, run_checkfilled, (void*)&(cfg[i]))) nthreads++;
-	fprintf(stderr, "%sStarted run_checkfilled (thread %d) for (%d;%d),(%d;%d)     \n", logprefix, i,
-		current->x0, current->y0, current->x1, current->y1);
-      } else if (current->x1 - current->x0 > MAX_RENDER_SIZE &&
-		 current->y1 - current->y0 > MAX_RENDER_SIZE) {
+	for (tempindex=0; tempindex<ncores; tempindex++) if (cfg[tempindex].taskid == -1) break;
+	if (tempindex==ncores) {fprintf(stderr,"Fatal error\n"); return -100;}
+	cfg[tempindex].taskid=tempindex;
+	cfg[tempindex].x0 = current->x0;
+	cfg[tempindex].y0 = current->y0;
+	cfg[tempindex].x1 = current->x1;
+	cfg[tempindex].y1 = current->y1;
+	cfg[tempindex].done = 0;
+	cfg[tempindex].maxiter = maxiter;
+	cfg[tempindex].lock = &lock;
+	if (!pthread_create(&(threads[tempindex]), NULL, run_checkfilled, (void*)&(cfg[tempindex]))) {
+	  nthreads++;
+	  fprintf(stderr, "%sStarted run_checkfilled (thread %d) for (%d;%d),(%d;%d)     \n", logprefix, tempindex,
+		  current->x0, current->y0, current->x1, current->y1);
+	} else perror("pthread_create()");
+      } else if ((1 + current->x1 - current->x0) > MAX_RENDER_SIZE &&
+		 (1 + current->y1 - current->y0) > MAX_RENDER_SIZE) {
 	quadsplit(&workstack, current);
       } else {
-	for (i=0; i<ncores; i++) if (cfg[i].taskid == -1) break;
-	if (i==ncores) {fprintf(stderr,"No free slots? There should be free slots!\n"); return -100;}
-	cfg[i].taskid=i;
-	cfg[i].x0 = current->x0;
-	cfg[i].y0 = current->y0;
-	cfg[i].x1 = current->x1;
-	cfg[i].y1 = current->y1;
-	cfg[i].done = 0;
-	cfg[i].maxiter = maxiter;
-	cfg[i].result = &result;
-	cfg[i].lock = &lock;
-	if (!pthread_create(&(threads[i]), NULL, run_dowork, (void*)&(cfg[i]))) nthreads++;
-	fprintf(stderr, "%sStarted run_dowork (thread %d) for (%d;%d),(%d;%d)     \n", logprefix, i, 
-		current->x0, current->y0, current->x1, current->y1);
+	for (tempindex=0; tempindex<ncores; tempindex++) if (cfg[tempindex].taskid == -1) break;
+	if (tempindex==ncores) {fprintf(stderr,"No free slots? There should be free slots!\n"); return -100;}
+	cfg[tempindex].taskid=tempindex;
+	cfg[tempindex].x0 = current->x0;
+	cfg[tempindex].y0 = current->y0;
+	cfg[tempindex].x1 = current->x1;
+	cfg[tempindex].y1 = current->y1;
+	cfg[tempindex].done = 0;
+	cfg[tempindex].maxiter = maxiter;
+	cfg[tempindex].lock = &lock;
+	if (!pthread_create(&(threads[tempindex]), NULL, run_dowork, (void*)&(cfg[tempindex]))) {
+	  nthreads++;
+	  fprintf(stderr, "%sStarted run_dowork (thread %d) for (%d;%d),(%d;%d)     \n", logprefix, tempindex, 
+		  current->x0, current->y0, current->x1, current->y1);
+	} else perror("pthread_create()");
       }
       free(current);
     }
 
-    for (i = 0; i < ncores; i++) {
-      if (cfg[i].taskid >= 0 && pthread_kill(threads[i], 0) != 0) {
-	pthread_join(threads[i], (void **)&r);
-	fprintf(stderr, "%sThread %d terminated                          \n", logprefix, i);
-	cfg[i].taskid = -1;
+    for (tempindex = 0; tempindex < ncores; tempindex++) {
+      if (cfg[tempindex].taskid >= 0 && pthread_kill(threads[tempindex], 0) != 0) {
+	pthread_join(threads[tempindex], (void **)&r);
+	fprintf(stderr, "%sThread %d terminated                          \n", logprefix, tempindex);
+	cfg[tempindex].taskid = -1;
 	nthreads--;
-	if (!(cfg[i].done)) {
-	  pushwork(&workstack, cfg[i].x0, cfg[i].y0, cfg[i].x1, cfg[i].y1, 1);
+	if (!(cfg[tempindex].done)) {
+	  pushwork(&workstack, cfg[tempindex].x0, cfg[tempindex].y0, cfg[tempindex].x1, cfg[tempindex].y1, 1);
 	}
       }
     }
 
-    if (result) {
-      pthread_mutex_lock(&lock);
-      while (result) {
-	finished_point res=result;
-	result=result->next;
-	unsigned int colornum=htonl(res->val);
-	fseek(dumpfile, 2 * sizeof(wtmp) + sizeof(colornum)*(res->y * width + res->x), SEEK_SET);
-	fwrite(&colornum, sizeof(colornum), 1, dumpfile);
-	fflush(dumpfile);
-	totpix_done++;
-	totpix_done_percent=(double)100 * (double)totpix_done / (double)totpix;
-	/*
-	  fprintf(stderr, "(%d, %d) : %ld  (%.2g%%, %d threads)                \r",
-		res->x, res->y, res->val, totpix_done_percent, nthreads);
-	*/
-	free(res);
-      }
-      if ((int)(totpix_done_percent*10) > (int)(totpix_done_lastpercent*10)) {
-	snprintf(logprefix, sizeof(logprefix), "thmand: %.2g%% done, %d threads, ", totpix_done_percent, nthreads);
-	fprintf(stderr, "%.2g%% done, %d threads\n", totpix_done_percent, nthreads);
-	totpix_done_lastpercent=totpix_done_percent;
-      }
-      pthread_mutex_unlock(&lock);
+    if (totpix_done != lasttotpix_done) {
+      snprintf(logprefix, sizeof(logprefix), "thmand: %g%% done: ", 100 * (double)totpix_done / (double)totpix);
+      lasttotpix_done=totpix_done;
     }
+
     if (nthreads == ncores || !workstack) usleep(200);
+  }
+
+  if (munmap(dumpbuffer, sizeof(long) * 2 + sizeof(int) * (width * height)) == -1) {
+    perror("munmap()");
   }
 
   fclose(dumpfile);
