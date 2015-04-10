@@ -38,9 +38,12 @@ unsigned long height=1024;
 unsigned long maxiter=1048576L;
 char logprefix[128];
 
-static long *dumpbuffer=NULL;
+static int *dumpbuffer=NULL;
 static long totpix_done=0;
 static long lasttotpix_done=0;
+
+static int minusone_int=-1;
+static unsigned int *minusone=(unsigned int*)(&minusone_int);
 
 void *run(void *cfg);
 
@@ -173,6 +176,7 @@ void *run_checkfilled(void *cfgi) {
   int filled=1;
   FLOAT xval,yval, xval1, yval1;
   int x0, x1, y0, y1;
+  int changedpixels=0;
   struct taskconfig *cfg = (struct taskconfig *)cfgi;
 
   x0 = cfg->x0;
@@ -182,18 +186,16 @@ void *run_checkfilled(void *cfgi) {
   yval=YVAL(y0);
   yval1=YVAL(y1);
   for (x = x0; x<= x1; x++) {
-    long v1 = dumpbuffer[(2 + x + y0 * width) * sizeof(long)];
-    long v2 = dumpbuffer[(2 + x + y1 * width) * sizeof(long)];
-    v1 = ntohl(v1);
-    v2 = ntohl(v2);
+    int v1 = dumpbuffer[4 + x + y0 * width];
+    int v2 = dumpbuffer[4 + x + y1 * width];
     xval=XVAL(x);
-    if (v1 == -1) {
+    if (v1 == *minusone) {
       v1=mandel(xval, yval, cfg->maxiter);
-      dumpbuffer[(2 + x + y0 * width) * sizeof(long)] = htonl(v1);
+      dumpbuffer[4 + x + y0 * width] = htonl(v1);
     }
-    if (v2 == -1) {
+    if (v2 == *minusone) {
       v2=mandel(xval, yval1, cfg->maxiter);
-      dumpbuffer[(2 + x + y1 * width) * sizeof(long)] = htonl(v2);
+      dumpbuffer[4 + x + y1 * width] = htonl(v2);
     }
     if (v1 < maxiter || v2 < maxiter) {
       filled=0;
@@ -204,22 +206,16 @@ void *run_checkfilled(void *cfgi) {
     xval=XVAL(x0);
     xval1=XVAL(x1);
     for (y = y0; y<= y1; y++) {
-      long v1 = dumpbuffer[(2 + x0 + y * width) * sizeof(long)];
-      long v2 = dumpbuffer[(2 + x1 + y * width) * sizeof(long)];
-      v1 = ntohl(v1);
-      v2 = ntohl(v2);
+      int v1 = dumpbuffer[4 + x0 + y * width];
+      int v2 = dumpbuffer[4 + x1 + y * width];
       yval=YVAL(y);
-      if (v1 == -1) {
+      if (v1 == *minusone) {
 	v1=mandel(xval, yval, cfg->maxiter);
-	pthread_mutex_lock(cfg->lock);
-	dumpbuffer[(2 + x0 + y * width) * sizeof(long)] = htonl(v1);
-	pthread_mutex_unlock(cfg->lock);
+	dumpbuffer[4 + x0 + y * width] = htonl(v1);
       }
-      if (v2 == -1) {
+      if (v2 == *minusone) {
 	v2=mandel(xval1, yval, cfg->maxiter);
-	pthread_mutex_lock(cfg->lock);
-	dumpbuffer[(2 + x1 + y * width) * sizeof(long)] = htonl(v2);
-	pthread_mutex_unlock(cfg->lock);
+	dumpbuffer[4 + x1 + y * width] = htonl(v2);
       }
       if (v1 < maxiter || v2 < maxiter) {
 	filled=0;
@@ -229,17 +225,15 @@ void *run_checkfilled(void *cfgi) {
     if (filled) {
       for (x = x0; x <= x1; x++) {
 	for (y = y0; y <= y1; y++) {
-	  long val=dumpbuffer[(2 + x + y * width) * sizeof(long)];
-	  val=ntohl(val);
-	  if (val == -1) {
-	    pthread_mutex_lock(cfg->lock);
-	    dumpbuffer[(2 + x + y * width) * sizeof(long)] = htonl(maxiter);
-	    pthread_mutex_unlock(cfg->lock);
+	  int val=dumpbuffer[4 + x + y * width];
+	  if (val == *minusone) {
+	    dumpbuffer[4 + x + y * width] = htonl(maxiter);
 	  }
+	  changedpixels++;
 	}
       }
       pthread_mutex_lock(cfg->lock);
-      totpix_done += (x1 - x0 + 1) * (y1 - y0 + 1);
+      totpix_done += changedpixels;
       pthread_mutex_unlock(cfg->lock);
       cfg->done = 1;
       return NULL;
@@ -252,7 +246,8 @@ void *run_dowork(void *cfgi) {
   unsigned int x,y;
   FLOAT xval,yval;
   int x0, x1, y0, y1;
-  unsigned long val;
+  int val;
+  int changedpixels=0;
   struct taskconfig *cfg = (struct taskconfig *)cfgi;
 
   x0 = cfg->x0;
@@ -263,22 +258,19 @@ void *run_dowork(void *cfgi) {
   for (y = y0; y <= y1; y++) {
     yval=YVAL(y);
     for (x = x0; x <= x1; x++) {
-      val = dumpbuffer[(2 + x + y * width) * sizeof(long)];
-      val = ntohl(val);
-      if (val == -1) {
+      val = dumpbuffer[4 + x + y * width];
+      if (val == *minusone) {
 	xval=XVAL(x);
 	val=mandel(xval, yval, cfg->maxiter);
-	pthread_mutex_lock(cfg->lock);
-	dumpbuffer[(2 + x + y * width) * sizeof(long)] = htonl(val);
-	pthread_mutex_unlock(cfg->lock);
-
+	dumpbuffer[4 + x + y * width] = htonl(val);
       }
+      changedpixels++;
     }
-    pthread_mutex_lock(cfg->lock);
-    totpix_done += (x1 - x0 + 1);
-    pthread_mutex_unlock(cfg->lock);
   }
 
+  pthread_mutex_lock(cfg->lock);
+  totpix_done += changedpixels;
+  pthread_mutex_unlock(cfg->lock);
   cfg->done=1;
 
   return NULL;
@@ -304,7 +296,7 @@ int main(int argc,char *argv[]) {
   static struct taskconfig *cfg=NULL;
   static pthread_t *threads=NULL;
 
-  int tempindex, r, nthreads=0, ncores=1, x, y;
+  int tempindex, r, nthreads=0, ncores=1, x, y, tmpval;
 
   int o;
 
@@ -312,7 +304,7 @@ int main(int argc,char *argv[]) {
   FILE *deffile, *dumpfile;
   struct stat fstatbuf;
 
-  unsigned long wtmp, htmp;
+  long wtmp, htmp;
 
   mpf_t gcentx, gcenty, gdx;
  
@@ -396,14 +388,13 @@ int main(int argc,char *argv[]) {
       fprintf(stderr, "Existing file has different width/height (%ld,%ld). Aborting.\n", wtmp, htmp);
       return -3;
     }
-    if (filesize < sizeof(wtmp) + sizeof(htmp) + sizeof(long)*(width*height)) {
-      lseek(fileno(dumpfile), sizeof(wtmp) + sizeof(htmp) + sizeof(long)*(width*height-1), SEEK_SET);
-      wtmp=0;
-      if (write(fileno(dumpfile), &wtmp, sizeof(wtmp)) == -1) {
+    if (filesize < sizeof(wtmp) + sizeof(htmp) + sizeof(int)*(width*height)) {
+      lseek(fileno(dumpfile), sizeof(wtmp) + sizeof(htmp) + sizeof(int)*(width*height-1), SEEK_SET);
+      tmpval=0;
+      if (write(fileno(dumpfile), &tmpval, sizeof(tmpval)) == -1) {
 	perror("write()");
 	return -5;
       }
-      fsync(fileno(dumpfile));
       file_handling=THMAND_MODE_UPDATE;
     } else {
       file_handling=THMAND_MODE_CONTINUE;
@@ -413,18 +404,18 @@ int main(int argc,char *argv[]) {
       perror(dumpfilename);
       return -2;
     }
-    lseek(fileno(dumpfile), sizeof(wtmp) + sizeof(htmp) + sizeof(long)*(width*height-1), SEEK_SET);
-    wtmp=0;
-    if (write(fileno(dumpfile), &wtmp, sizeof(wtmp)) == -1) {
+    lseek(fileno(dumpfile), sizeof(wtmp) + sizeof(wtmp) + sizeof(int)*(width*height-1), SEEK_SET);
+    tmpval=0;
+    if (write(fileno(dumpfile), &tmpval, sizeof(tmpval)) == -1) {
       perror("write()");
       return -5;
     }
-    fsync(fileno(dumpfile));
     file_handling=THMAND_MODE_INITIALIZE;
   }
 
-  if ((dumpbuffer=(long *)mmap(NULL,
-			       sizeof(long) * (2 + width * height),
+  if ((dumpbuffer=(int *)mmap(NULL,
+			      sizeof(wtmp) + sizeof(htmp) + 
+			      sizeof(int) * (width * height),
 			       PROT_READ|PROT_WRITE,
 			       MAP_SHARED,
 			       fileno(dumpfile),
@@ -435,17 +426,18 @@ int main(int argc,char *argv[]) {
   switch (file_handling) {
   case THMAND_MODE_INITIALIZE:
     fprintf(stderr, "Initializing file...\n");
-    wtmp=htonl(width);
-    htmp=htonl(height);
-    dumpbuffer[0]=wtmp;
-    dumpbuffer[1]=htmp;
-    msync(&(dumpbuffer[0]), 2 * sizeof(long), MS_ASYNC);
+    // Someone (me) made a mistake early on here, so the width and height
+    // are 64-bit values but are treated as 32-bit values in the dump file.
+    // This is why all address uses an offset of 4 ints (2 longs) instead of 2.
+    dumpbuffer[0]=htonl(width);
+    dumpbuffer[2]=htonl(height);
+    msync(&(dumpbuffer[0]), 4 * sizeof(int), MS_ASYNC);
     for (y=0; y<height; y++) {
       fprintf(stderr, "%d\r", y);
       for (x=0; x<width; x++) {
-	dumpbuffer[2 + x + y * width] = htonl(-1);
+	dumpbuffer[4 + x + y * width] = *minusone;
       }
-      msync(&(dumpbuffer[y*width]), width* sizeof(long), MS_ASYNC);
+      msync(&(dumpbuffer[4 + y*width]), width * sizeof(int), MS_ASYNC);
     }
     fprintf(stderr, "Done.    \n");
     break;
@@ -454,12 +446,11 @@ int main(int argc,char *argv[]) {
     for (y=0; y<height; y++) {
       fprintf(stderr, "%d\r", y);
       for (x=0; x<width; x++) {
-	long val=dumpbuffer[2 + x + y * width];
-	val=ntohl(val);
+	int val=ntohl(dumpbuffer[4 + x + y * width]);
 	if (val == 0)
-	  dumpbuffer[2 + x + y * width] = htonl(-1);
+	  dumpbuffer[4 + x + y * width] = *minusone;
       }
-      msync(&(dumpbuffer[y*width]), width* sizeof(long), MS_ASYNC);
+      msync(&(dumpbuffer[4 + y * width]), width * sizeof(int), MS_ASYNC);
     }
     fprintf(stderr, "Done.    \n");
     break;
@@ -548,7 +539,7 @@ int main(int argc,char *argv[]) {
     if (nthreads == ncores || !workstack) usleep(200);
   }
 
-  if (munmap(dumpbuffer, sizeof(long) * (2 + width * height)) == -1) {
+  if (munmap(dumpbuffer, sizeof(long) * 2 + sizeof(int) * (width * height)) == -1) {
     perror("munmap()");
   }
 
