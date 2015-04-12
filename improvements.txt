@@ -3,6 +3,4 @@ Use proper uint_32 style types for ints to avoid confusion
 Write code to transform dump files with long values to int values
 Add field in dump file for maxiter value
 Write code to determine maxiter value used in existing dump files and moving it to the header.
-Add code to thmand.c to read current maxiter and if a new higher one was selected on the
-command line, invalidate (set to -1) any pixel that has the old maxiter value.
 Add code for 256-bit and 512-bit floats.
