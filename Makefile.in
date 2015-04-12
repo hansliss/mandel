@@ -50,11 +50,15 @@ TARGET8=mandelreadpicspec
 SOURCES8=mandelreadpicspec.c targa.c
 OBJS8=mandelreadpicspec.o targa.o
 HEADERS8=targa.h
+TARGET9=mandelcheckpercent
+SOURCES9=mandelcheckpercent.c
+OBJS9=mandelcheckpercent.o
+HEADERS9=
 LIB_OBJS=
 
-OBJS=$(OBJS1) $(OBJS2) $(OBJS3) $(OBJS4) $(OBJS5) $(OBJS6) $(OBJS7) $(OBJS8)
-SOURCES=$(SOURCES1) $(SOURCES2) $(SOURCES3) $(SOURCES4) $(SOURCES5) $(SOURCES6) $(SOURCES7) $(SOURCES8)
-TARGETS=$(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4) $(TARGET5) $(TARGET6) $(TARGET7) $(TARGET8)
+OBJS=$(OBJS1) $(OBJS2) $(OBJS3) $(OBJS4) $(OBJS5) $(OBJS6) $(OBJS7) $(OBJS8) $(OBJS9)
+SOURCES=$(SOURCES1) $(SOURCES2) $(SOURCES3) $(SOURCES4) $(SOURCES5) $(SOURCES6) $(SOURCES7) $(SOURCES8) $(SOURCES9)
+TARGETS=$(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4) $(TARGET5) $(TARGET6) $(TARGET7) $(TARGET8) $(TARGET9)
 DISTSRC=aclocal.m4 config.h.in configure configure.in install-sh Makefile.in mkinstalldirs $(SOURCES) README
 DISTBIN=$(TARGETS) README
 
@@ -88,6 +92,9 @@ $(TARGET7): $(OBJS7)
 $(TARGET8): $(OBJS8)
 	$(CC) $(CFLAGS) -o $(TARGET8) $(OBJS8) $(LDFLAGS) $(LIBS)
 
+$(TARGET9): $(OBJS9)
+	$(CC) $(CFLAGS) -o $(TARGET9) $(OBJS9) $(LDFLAGS) $(LIBS)
+
 $(OBJS1): $(SOURCES1)
 
 $(OBJS2): $(SOURCES2) $(HEADERS2)
@@ -103,6 +110,8 @@ $(OBJS6): $(SOURCES6) $(HEADERS6)
 $(OBJS7): $(SOURCES7)
 
 $(OBJS8): $(SOURCES8) $(HEADERS8)
+
+$(OBJS9): $(SOURCES9)
 
 clean:
 	/bin/rm -f $(TARGETS) *.o core $(PRODUCT)-$(VERSION)-*.tar.gz*

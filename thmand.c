@@ -42,9 +42,6 @@ static int *dumpbuffer=NULL;
 static long totpix_done=0;
 static long lasttotpix_done=0;
 
-static int minusone_int=-1;
-static unsigned int *minusone=(unsigned int*)(&minusone_int);
-
 void *run(void *cfg);
 
 #define max(x,y) (((x)>(y))?(x):(y))
@@ -186,17 +183,17 @@ void *run_checkfilled(void *cfgi) {
   yval=YVAL(y0);
   yval1=YVAL(y1);
   for (x = x0; x<= x1; x++) {
-    int v1 = dumpbuffer[4 + x + y0 * width];
-    int v2 = dumpbuffer[4 + x + y1 * width];
+    int v1 = ntohl(dumpbuffer[4 + x + y0 * width]);
+    int v2 = ntohl(dumpbuffer[4 + x + y1 * width]);
     xval=XVAL(x);
-    if (v1 == *minusone) {
+    if (v1 == -1) {
       v1=mandel(xval, yval, cfg->maxiter);
       dumpbuffer[4 + x + y0 * width] = htonl(v1);
-    } else v1=ntohl(v1);
-    if (v2 == *minusone) {
+    }
+    if (v2 == -1) {
       v2=mandel(xval, yval1, cfg->maxiter);
       dumpbuffer[4 + x + y1 * width] = htonl(v2);
-    } else v2=ntohl(v2);
+    }
     if (v1 < cfg->maxiter || v2 < cfg->maxiter) {
       filled=0;
       break;
@@ -206,17 +203,17 @@ void *run_checkfilled(void *cfgi) {
     xval=XVAL(x0);
     xval1=XVAL(x1);
     for (y = y0; y<= y1; y++) {
-      int v1 = dumpbuffer[4 + x0 + y * width];
-      int v2 = dumpbuffer[4 + x1 + y * width];
+      int v1 = ntohl(dumpbuffer[4 + x0 + y * width]);
+      int v2 = ntohl(dumpbuffer[4 + x1 + y * width]);
       yval=YVAL(y);
-      if (v1 == *minusone) {
+      if (v1 == -1) {
 	v1=mandel(xval, yval, cfg->maxiter);
 	dumpbuffer[4 + x0 + y * width] = htonl(v1);
-      } else v1 = ntohl(v1);
-      if (v2 == *minusone) {
+      }
+      if (v2 == -1) {
 	v2=mandel(xval1, yval, cfg->maxiter);
 	dumpbuffer[4 + x1 + y * width] = htonl(v2);
-      } else v2 = ntohl(v2);
+      }
       if (v1 < cfg->maxiter || v2 < cfg->maxiter) {
 	filled=0;
 	break;
@@ -225,8 +222,8 @@ void *run_checkfilled(void *cfgi) {
     if (filled) {
       for (x = x0; x <= x1; x++) {
 	for (y = y0; y <= y1; y++) {
-	  int val=dumpbuffer[4 + x + y * width];
-	  if (val == *minusone) {
+	  int val=ntohl(dumpbuffer[4 + x + y * width]);
+	  if (val == -1) {
 	    dumpbuffer[4 + x + y * width] = htonl(cfg->maxiter);
 	  }
 	  changedpixels++;
@@ -258,8 +255,8 @@ void *run_dowork(void *cfgi) {
   for (y = y0; y <= y1; y++) {
     yval=YVAL(y);
     for (x = x0; x <= x1; x++) {
-      val = dumpbuffer[4 + x + y * width];
-      if (val == *minusone) {
+      val = ntohl(dumpbuffer[4 + x + y * width]);
+      if (val == -1) {
 	xval=XVAL(x);
 	val=mandel(xval, yval, cfg->maxiter);
 	dumpbuffer[4 + x + y * width] = htonl(val);
@@ -431,11 +428,12 @@ int main(int argc,char *argv[]) {
     // This is why all address uses an offset of 4 ints (2 longs) instead of 2.
     dumpbuffer[0]=htonl(width);
     dumpbuffer[2]=htonl(height);
+
     msync(&(dumpbuffer[0]), 4 * sizeof(int), MS_ASYNC);
     for (y=0; y<height; y++) {
       fprintf(stderr, "%d\r", y);
       for (x=0; x<width; x++) {
-	dumpbuffer[4 + x + y * width] = *minusone;
+	dumpbuffer[4 + x + y * width] = htonl((long)-1);
       }
       msync(&(dumpbuffer[4 + y*width]), width * sizeof(int), MS_ASYNC);
     }
@@ -448,7 +446,7 @@ int main(int argc,char *argv[]) {
       for (x=0; x<width; x++) {
 	int val=ntohl(dumpbuffer[4 + x + y * width]);
 	if (val == 0)
-	  dumpbuffer[4 + x + y * width] = *minusone;
+	  dumpbuffer[4 + x + y * width] = ntohl(-1);
       }
       msync(&(dumpbuffer[4 + y * width]), width * sizeof(int), MS_ASYNC);
     }
