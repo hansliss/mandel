@@ -80,8 +80,8 @@ int main(int argc,char *argv[]) {
     fprintf(stderr, "%d\r", y);
     for (x=0; x<width; x++) {
       int val=ntohl(dumpbuffer[4 + x + y * width]);
+      if (val != -1) totpix_done++;
       if (val != maxiter) {
-	if (val != -1) totpix_done++;
 	if (val > highval_threshold) highval_count++;
 	if (val > highest_value) {
 	  nexthighest_value = highest_value;
