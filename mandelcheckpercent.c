@@ -100,8 +100,8 @@ int main(int argc,char *argv[]) {
   printf("%ld - %g%% - high value points (within 5%% from maxiter).\n",
 	 highval_count, 100*(double)highval_count/(double)totpix);
   printf("Highest two values: %ld and %ld.\n", nexthighest_value, highest_value);
-  if (highest_value > maxiter) {
-    printf("You know, %ld wasn't used as max iterations for this one. I suspect %ld was...\n", maxiter, highest_value);
+  if (highest_value != maxiter) {
+    printf("You know, %ld %swasn't used as max iterations for this one. I suspect %ld was...\n", maxiter, (maxiter>highest_value)?"probably ":"", highest_value);
   }
 
   if (munmap(dumpbuffer, sizeof(long) * 2 + sizeof(int) * (width * height)) == -1) {
