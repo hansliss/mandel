@@ -25,13 +25,15 @@ void usage(char *progname) {
 
 int main(int argc,char *argv[]) {
   long totpix;
+  int highest_value=0;
+  int nexthighest_value=0;
   static int *dumpbuffer=NULL;
   long width, height;
   int x, y;
   int o;
   FILE *dumpfile;
   char *dumpfilename=NULL;
-  long totpix_done=0, maxiter_count=0;
+  long totpix_done=0, maxiter_count=0, highval_count=0;
   unsigned long maxiter=1048576L;
   while ((o=getopt(argc, argv, "i:m:")) != EOF) {
     switch (o) {
@@ -73,16 +75,31 @@ int main(int argc,char *argv[]) {
     return 4;
   }
 
+  int highval_threshold = (95 * maxiter) / 100;
   for (y=0; y<height; y++) {
     fprintf(stderr, "%d\r", y);
     for (x=0; x<width; x++) {
-      if (ntohl(dumpbuffer[4 + x + y * width]) != -1) totpix_done++;
-      if (ntohl(dumpbuffer[4 + x + y * width]) == maxiter) maxiter_count++;
+      int val=ntohl(dumpbuffer[4 + x + y * width]);
+      if (val != maxiter) {
+	if (val != -1) totpix_done++;
+	if (val > highval_threshold) highval_count++;
+	if (val > highest_value) {
+	  nexthighest_value = highest_value;
+	  highest_value = val;
+	} else if (val > nexthighest_value) {
+	  nexthighest_value = val;
+	}
+      } else maxiter_count++;
     }
   }
   
-  printf("%s: (%ld x %ld), %g%% done. %ld points out of %ld @maxiter (%g%%).\n", dumpfilename, width, height,
-	 100*(double)totpix_done/(double)totpix, maxiter_count, totpix_done, 100*(double)maxiter_count/(double)totpix_done);
+  printf("%s: (%ld x %ld), %g%% done.\n", dumpfilename, width, height,
+	 100*(double)totpix_done/(double)totpix);
+  printf("%ld points out of %ld @maxiter (%g%%).\n", maxiter_count, totpix,
+	 100*(double)maxiter_count/(double)totpix);
+  printf("%ld - %g%% - high value points (within 5%% from maxiter).\n",
+	 highval_count, 100*(double)highval_count/(double)totpix);
+  printf("Highest two values: %d and %d.\n", nexthighest_value, highest_value);
 
   if (munmap(dumpbuffer, sizeof(long) * 2 + sizeof(int) * (width * height)) == -1) {
     perror("munmap()");
