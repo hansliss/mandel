@@ -100,8 +100,8 @@ int main(int argc,char *argv[]) {
   fprintf(stderr, "Done.    \n");
 
   for (int x=0; x<width; x++) {
-    fprintf(stderr, "%d     \r", x);
-    double xval=XMIN + (XMIN-XMAX)*(double)x/width;
+    double xval=XMIN + (XMAX - XMIN)*(double)x/(double)width;
+    fprintf(stderr, "%d     %g	\r", x, xval);
     int done=0;
     double yval=0.5;
     i = 0;
