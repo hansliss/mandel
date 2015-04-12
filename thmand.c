@@ -274,7 +274,7 @@ void *run_dowork(void *cfgi) {
 }
 
 void usage(char *progname) {
-  fprintf(stderr,"Usage: %s -d <def. file> -o <out file> -w <width> -h <height> -m <max iterations>[-p <cpu cores>]\n", progname);
+  fprintf(stderr,"Usage: %s -d <def. file> -o <out file> -w <width> -h <height> -m <max iterations> [-p <cpu cores>] [-O <old max iterations>]\n", progname);
   fprintf(stderr,"\tWhere <file> contains three values, each on one line:\n");
   fprintf(stderr,"\t  center X\n\t  center Y\n\t  width.\n");
 }
@@ -294,6 +294,7 @@ int main(int argc,char *argv[]) {
   static pthread_t *threads=NULL;
 
   int tempindex, r, nthreads=0, ncores=1, x, y, tmpval;
+  unsigned long oldmaxiter=0;
 
   int o;
 
@@ -315,7 +316,7 @@ int main(int argc,char *argv[]) {
   long totpix=(long)width*height;
 
   snprintf(logprefix, sizeof(logprefix), "thmand: ");
-  while ((o=getopt(argc, argv, "d:o:p:w:h:m:")) != EOF) {
+  while ((o=getopt(argc, argv, "d:o:p:w:h:m:O:")) != EOF) {
     switch (o) {
     case 'd': deffilename=optarg; break;
     case 'o': dumpfilename=optarg; break;
@@ -323,6 +324,7 @@ int main(int argc,char *argv[]) {
     case 'w': width=atoi(optarg); break;
     case 'h': height=atoi(optarg); break;
     case 'm': maxiter=atoi(optarg); break;
+    case 'O': oldmaxiter=atoi(optarg); break;
     default: usage(argv[0]); return -1; break;
     }
   }
@@ -453,6 +455,19 @@ int main(int argc,char *argv[]) {
     fprintf(stderr, "Done.    \n");
     break;
   default:
+    if (oldmaxiter != 0 && oldmaxiter < maxiter) {
+      fprintf(stderr, "New and higher maxiter value specified, so invalidating all old maxiter points.\n");
+      for (y=0; y<height; y++) {
+	fprintf(stderr, "%d\r", y);
+	for (x=0; x<width; x++) {
+	  int val=ntohl(dumpbuffer[4 + x + y * width]);
+	  if (val == oldmaxiter)
+	    dumpbuffer[4 + x + y * width] = htonl(-1);
+	}
+	msync(&(dumpbuffer[4 + y * width]), width * sizeof(int), MS_ASYNC);
+      }
+      fprintf(stderr, "Done.    \n");
+    }
     break;
   }
     
