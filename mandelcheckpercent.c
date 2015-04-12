@@ -25,8 +25,8 @@ void usage(char *progname) {
 
 int main(int argc,char *argv[]) {
   long totpix;
-  int highest_value=0;
-  int nexthighest_value=0;
+  long highest_value=0;
+  long nexthighest_value=0;
   static int *dumpbuffer=NULL;
   long width, height;
   int x, y;
@@ -86,7 +86,7 @@ int main(int argc,char *argv[]) {
 	if (val > highest_value) {
 	  nexthighest_value = highest_value;
 	  highest_value = val;
-	} else if (val > nexthighest_value) {
+	} else if (val < highest_value && val > nexthighest_value) {
 	  nexthighest_value = val;
 	}
       } else maxiter_count++;
@@ -99,7 +99,10 @@ int main(int argc,char *argv[]) {
 	 100*(double)maxiter_count/(double)totpix);
   printf("%ld - %g%% - high value points (within 5%% from maxiter).\n",
 	 highval_count, 100*(double)highval_count/(double)totpix);
-  printf("Highest two values: %d and %d.\n", nexthighest_value, highest_value);
+  printf("Highest two values: %ld and %ld.\n", nexthighest_value, highest_value);
+  if (highest_value > maxiter) {
+    printf("You know, %ld wasn't used as max iterations for this one. I suspect %ld was...\n", maxiter, highest_value);
+  }
 
   if (munmap(dumpbuffer, sizeof(long) * 2 + sizeof(int) * (width * height)) == -1) {
     perror("munmap()");
