@@ -26,14 +26,12 @@
 #define YMAX 1.0
 #define YMIN 0.0
 
-#define MINITER 50
-
 void usage(char *progname) {
-  fprintf(stderr,"Usage: %s -o <out file> -w <width> -h <height> -m <max iterations>\n", progname);
+  fprintf(stderr,"Usage: %s -o <out file> -w <width> -h <height> -m <max iterations> [-M <initial iterations>]\n", progname);
 }
 
 int main(int argc,char *argv[]) {
-  int o;
+  int o, x, y;
 
   char *dumpfilename=NULL;
   FILE *dumpfile;
@@ -43,15 +41,17 @@ int main(int argc,char *argv[]) {
   long width=0;
   long height=0;
   unsigned long maxiter=1048576L;
+  unsigned long miniter=50000;
 
   static int *dumpbuffer=NULL;
 
-  while ((o=getopt(argc, argv, "o:w:h:m:")) != EOF) {
+  while ((o=getopt(argc, argv, "o:w:h:m:M:")) != EOF) {
     switch (o) {
     case 'o': dumpfilename=optarg; break;
     case 'w': width=atoi(optarg); break;
     case 'h': height=atoi(optarg); break;
     case 'm': maxiter=atoi(optarg); break;
+    case 'M': miniter=atoi(optarg); break;
     default: usage(argv[0]); return -1; break;
     }
   }
@@ -89,9 +89,9 @@ int main(int argc,char *argv[]) {
   dumpbuffer[0]=htonl(width);
   dumpbuffer[2]=htonl(height);
   msync(&(dumpbuffer[0]), 4 * sizeof(int), MS_ASYNC);
-  for (int y=0; y<height; y++) {
+  for (y=0; y<height; y++) {
     fprintf(stderr, "%d\r", y);
-    for (int x=0; x<width; x++) {
+    for (x=0; x<width; x++) {
       dumpbuffer[4 + x + y * width] = 0;
     }
     msync(&(dumpbuffer[4 + y*width]), width * sizeof(int), MS_ASYNC);
@@ -99,19 +99,25 @@ int main(int argc,char *argv[]) {
   
   fprintf(stderr, "Done.    \n");
 
-  for (int x=0; x<width; x++) {
+  for (x=0; x<width; x++) {
     double xval=XMIN + (XMAX - XMIN)*(double)x/(double)width;
     fprintf(stderr, "%d     %g	\r", x, xval);
     int done=0;
+    int final_at=0;
     int y;
     double yval=0.5;
     i = 0;
     while (!done) {
       yval = xval * yval * (1 - yval);
       y=height - height * ((yval - YMIN)/(YMAX - YMIN))- 1;
-      if (i++ > MINITER && y >= 0 && y < height) {
-	if ((++dumpbuffer[4 + x + y * width]) >= maxiter) {
-	  done = 1;
+      if (i++ > miniter && y >= 0 && y < height) {
+	if (dumpbuffer[4 + x + y * width] < maxiter) {
+	  if (++dumpbuffer[4 + x + y * width] == maxiter && final_at == 0) {
+	    final_at = i;
+	  }
+	}
+	if (final_at && i == final_at * 2) {
+	  done=1;
 	}
       }
     }
