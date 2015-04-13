@@ -103,25 +103,21 @@ int main(int argc,char *argv[]) {
     double xval=XMIN + (XMAX - XMIN)*(double)x/(double)width;
     fprintf(stderr, "%d     %g	\r", x, xval);
     int done=0;
+    int y;
     double yval=0.5;
     i = 0;
     while (!done) {
       yval = xval * yval * (1 - yval);
-      int y=height - height * ((yval - YMIN)/(YMAX - YMIN))- 1;
+      y=height - height * ((yval - YMIN)/(YMAX - YMIN))- 1;
       if (i++ > MINITER && y >= 0 && y < height) {
 	if ((++dumpbuffer[4 + x + y * width]) >= maxiter) {
 	  done = 1;
 	}
       }
     }
-  }
-  
-  for (int y=0; y<height; y++) {
-    fprintf(stderr, "%d\r", y);
-    for (int x=0; x<width; x++) {
+    for (y=0; y<height; y++) {
       dumpbuffer[4 + x + y * width] = htonl(dumpbuffer[4 + x + y * width]);
     }
-    msync(&(dumpbuffer[4 + y*width]), width * sizeof(int), MS_ASYNC);
   }
   
   fprintf(stderr, "Done.    \n");
