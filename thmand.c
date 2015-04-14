@@ -42,6 +42,13 @@ static int *dumpbuffer=NULL;
 static long totpix_done=0;
 static long lasttotpix_done=0;
 
+typedef struct fileheader_s {
+  int width;
+  int height;
+  int maxiter;
+  int reserved;
+} fileheader;
+
 void *run(void *cfg);
 
 #define max(x,y) (((x)>(y))?(x):(y))
@@ -293,6 +300,8 @@ int main(int argc,char *argv[]) {
   static struct taskconfig *cfg=NULL;
   static pthread_t *threads=NULL;
 
+  fileheader header;
+
   int tempindex, r, nthreads=0, ncores=1, x, y, tmpval;
   unsigned long oldmaxiter=0;
 
@@ -373,22 +382,18 @@ int main(int argc,char *argv[]) {
       perror(dumpfilename);
       return -2;
     }
-    if (fread(&wtmp, sizeof(wtmp), 1, dumpfile) != 1) {
+    if (fread(&header, sizeof(header), 1, dumpfile) != 1) {
       fprintf(stderr, "Error: File exists but no width/height.\n");
       return -5;
     }
-    if (fread(&htmp, sizeof(wtmp), 1, dumpfile) != 1) {
-      fprintf(stderr, "Error: File exists but no width/height.\n");
-      return -5;
-    }
-    wtmp=ntohl(wtmp);
-    htmp=ntohl(htmp);
+    wtmp=ntohl(header.width);
+    htmp=ntohl(header.height);
     if (wtmp != width || htmp != height) {
       fprintf(stderr, "Existing file has different width/height (%ld,%ld). Aborting.\n", wtmp, htmp);
       return -3;
     }
-    if (filesize < sizeof(wtmp) + sizeof(htmp) + sizeof(int)*(width*height)) {
-      lseek(fileno(dumpfile), sizeof(wtmp) + sizeof(htmp) + sizeof(int)*(width*height-1), SEEK_SET);
+    if (filesize < sizeof(header) + sizeof(int)*(width*height)) {
+      lseek(fileno(dumpfile), sizeof(header) + sizeof(int)*(width*height-1), SEEK_SET);
       tmpval=0;
       if (write(fileno(dumpfile), &tmpval, sizeof(tmpval)) == -1) {
 	perror("write()");
@@ -403,7 +408,7 @@ int main(int argc,char *argv[]) {
       perror(dumpfilename);
       return -2;
     }
-    lseek(fileno(dumpfile), sizeof(wtmp) + sizeof(wtmp) + sizeof(int)*(width*height-1), SEEK_SET);
+    lseek(fileno(dumpfile), sizeof(header) + sizeof(int)*(width*height-1), SEEK_SET);
     tmpval=0;
     if (write(fileno(dumpfile), &tmpval, sizeof(tmpval)) == -1) {
       perror("write()");
@@ -413,7 +418,7 @@ int main(int argc,char *argv[]) {
   }
 
   if ((dumpbuffer=(int *)mmap(NULL,
-			      sizeof(wtmp) + sizeof(htmp) + 
+			      sizeof(header) + 
 			      sizeof(int) * (width * height),
 			       PROT_READ|PROT_WRITE,
 			       MAP_SHARED,
@@ -429,9 +434,11 @@ int main(int argc,char *argv[]) {
     // are 64-bit values but are treated as 32-bit values in the dump file.
     // This is why all address uses an offset of 4 ints (2 longs) instead of 2.
     dumpbuffer[0]=htonl(width);
-    dumpbuffer[2]=htonl(height);
+    dumpbuffer[1]=htonl(height);
+    dumpbuffer[2]=htonl(maxiter);
+    dumpbuffer[3]=0;
 
-    msync(&(dumpbuffer[0]), 4 * sizeof(int), MS_ASYNC);
+    msync(&(dumpbuffer[0]), sizeof(header), MS_ASYNC);
     for (y=0; y<height; y++) {
       fprintf(stderr, "%d\r", y);
       for (x=0; x<width; x++) {
@@ -552,7 +559,7 @@ int main(int argc,char *argv[]) {
     if (nthreads == ncores || !workstack) usleep(200);
   }
 
-  if (munmap(dumpbuffer, sizeof(long) * 2 + sizeof(int) * (width * height)) == -1) {
+  if (munmap(dumpbuffer, sizeof(header) + sizeof(int) * (width * height)) == -1) {
     perror("munmap()");
   }
 

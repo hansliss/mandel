@@ -23,12 +23,19 @@ void usage(char *progname) {
   fprintf(stderr,"Usage: %s -i <dump file> [-m <max iterations>]\n", progname);
 }
 
+typedef struct fileheader_s {
+  int width;
+  int height;
+  int maxiter;
+  int reserved;
+} fileheader;
+
 int main(int argc,char *argv[]) {
   long totpix;
   long highest_value=0;
   long nexthighest_value=0;
   static int *dumpbuffer=NULL;
-  long width, height;
+  fileheader header;
   int x, y;
   int o;
   FILE *dumpfile;
@@ -52,21 +59,17 @@ int main(int argc,char *argv[]) {
     perror(dumpfilename);
     return -2;
   }
-  if (fread(&width, sizeof(width), 1, dumpfile) != 1) {
+  if (fread(&header, sizeof(header), 1, dumpfile) != 1) {
     fprintf(stderr, "Error: File exists but no width/height.\n");
     return -5;
   }
-  if (fread(&height, sizeof(height), 1, dumpfile) != 1) {
-    fprintf(stderr, "Error: File exists but no width/height.\n");
-    return -5;
-  }
-  width=ntohl(width);
-  height=ntohl(height);
-  totpix=(long)width*height;
+  header.width=ntohl(header.width);
+  header.height=ntohl(header.height);
+  totpix=(long)header.width*header.height;
 
   if ((dumpbuffer=(int *)mmap(NULL,
-			      sizeof(width) + sizeof(height) + 
-			      sizeof(int) * (width * height),
+			      sizeof(header) + 
+			      sizeof(int) * (header.width * header.height),
 			       PROT_READ,
 			       MAP_SHARED,
 			       fileno(dumpfile),
@@ -76,10 +79,10 @@ int main(int argc,char *argv[]) {
   }
 
   int highval_threshold = (95 * maxiter) / 100;
-  for (y=0; y<height; y++) {
+  for (y=0; y<header.height; y++) {
     fprintf(stderr, "%d\r", y);
-    for (x=0; x<width; x++) {
-      int val=ntohl(dumpbuffer[4 + x + y * width]);
+    for (x=0; x<header.width; x++) {
+      int val=ntohl(dumpbuffer[4 + x + y * header.width]);
       if (val != -1) totpix_done++;
       if (val != maxiter) {
 	if (val > highval_threshold) highval_count++;
@@ -93,7 +96,7 @@ int main(int argc,char *argv[]) {
     }
   }
   
-  printf("%s: (%ld x %ld), %g%% done.\n", dumpfilename, width, height,
+  printf("%s: (%d x %d), %g%% done.\n", dumpfilename, header.width, header.height,
 	 100*(double)totpix_done/(double)totpix);
   printf("%ld points out of %ld @maxiter (%g%%).\n", maxiter_count, totpix,
 	 100*(double)maxiter_count/(double)totpix);
@@ -104,7 +107,7 @@ int main(int argc,char *argv[]) {
     printf("You know, %ld %swasn't used as max iterations for this one. I suspect %ld was...\n", maxiter, (maxiter>highest_value)?"probably ":"", highest_value);
   }
 
-  if (munmap(dumpbuffer, sizeof(long) * 2 + sizeof(int) * (width * height)) == -1) {
+  if (munmap(dumpbuffer, sizeof(header) + sizeof(int) * (header.width * header.height)) == -1) {
     perror("munmap()");
   }
   

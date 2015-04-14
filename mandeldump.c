@@ -22,6 +22,13 @@ unsigned long maxiter=MAXITER;
 
 typedef unsigned char byte;
 
+typedef struct fileheader_s {
+  int width;
+  int height;
+  int maxiter;
+  int reserved;
+} fileheader;
+
 void xmlinit(FILE *xmlfile, char *name, time_t filetime, char *outfile, mpf_t centx, mpf_t centy, mpf_t dx,
 	     mpf_t cx0, mpf_t cy0, mpf_t cx1, mpf_t cy1,
 	     unsigned int width, unsigned int height, unsigned int maxiter) {
@@ -345,7 +352,7 @@ void usage(char *progname) {
 int main(int argc,char *argv[])
 {
   unsigned int x,y, width=WIDTH, height=HEIGHT, xstart=0, ystart=0;
- unsigned long wtmp, htmp;
+ fileheader header;
  mpf_t x0,x1,y0,y1,centx,centy,dx,dy,xval,yval,vx;
 
  int usegmp=0;
@@ -497,11 +504,15 @@ int main(int argc,char *argv[])
  dumpfile=NULL;
  if (!stat(dumpfilename, &dumpfilestat)) {
    dumpfile=fopen(dumpfilename, "rb");
-   if (fread(&wtmp, sizeof(wtmp), 1, dumpfile) == 1 &&
-       fread(&htmp, sizeof(htmp), 1, dumpfile) == 1 &&
-       ntohl(wtmp) == width &&
-       ntohl(htmp) == height) {
-     long alreadydone = (dumpfilestat.st_size - (sizeof(htmp) + sizeof(wtmp))) / sizeof(colornum);
+   if (fread(&header, sizeof(header), 1, dumpfile) != 1) {
+     fprintf(stderr, "Can't read header from file.\n");
+     return -2;
+   }
+   header.width=ntohl(header.width);
+   header.height=ntohl(header.height);
+   header.maxiter=ntohl(header.maxiter);
+   if (header.width == width && header.height == height) {
+     long alreadydone = (dumpfilestat.st_size - sizeof(header)) / sizeof(colornum);
      xstart = alreadydone % width;
      ystart = alreadydone / width;
      fprintf(stderr, "Continuing at (%d,%d)\n", xstart, ystart);
@@ -520,10 +531,10 @@ int main(int argc,char *argv[])
      return -1;
    }
 
-   wtmp=htonl(width);
-   htmp=htonl(height);
-   fwrite(&wtmp, sizeof(wtmp), 1, dumpfile);
-   fwrite(&htmp, sizeof(htmp), 1, dumpfile);
+   header.width=htonl(width);
+   header.height=htonl(height);
+   header.maxiter=htonl(maxiter);
+   fwrite(&header, sizeof(header), 1, dumpfile);
  }
 
  if (minprec <= 0 && mpf_cmp(vx, mind_f) > 0) {

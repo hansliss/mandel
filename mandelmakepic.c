@@ -1,3 +1,5 @@
+#define _FILE_OFFSET_BITS 64
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -11,10 +13,18 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <netinet/in.h>
+#include <sys/mman.h>
 
 #include "targa.h"
 
 typedef unsigned char byte;
+
+typedef struct fileheader_s {
+  int width;
+  int height;
+  int maxiter;
+  int reserved;
+} fileheader;
 
 void hsv2rgb(float H,float S,float V,byte *R,byte *G,byte *B)
 {
@@ -140,12 +150,13 @@ void handler(int s)
 
 int main(int argc, char *argv[])
 {
-  FILE *infile;
+  FILE *dumpfile, *deffile;
+  fileheader header;
   int skip;
   int build_subdirs=0;
-  unsigned long width, height, i, j, n;
-  unsigned int *buffer, *hist, vmax, nmax, looping=0;
-  unsigned long wtmp, htmp;
+  unsigned int width, height, i, j;
+  static int *dumpbuffer=NULL;
+  unsigned int *hist, vmax, looping=0;
   unsigned long loval, hival, maxiter, mival=1048576L, hival_threshold=2;
   unsigned long pixels=0, blackpixels=0, whitepixels=0;
   int x, y;
@@ -163,7 +174,7 @@ int main(int argc, char *argv[])
 
   struct stat statbuf;
 
-  char *infilename=NULL;
+  char *dumpfilename=NULL;
   char *outfilename=NULL;
   char *deffilename=NULL;
   char *scriptfilename=NULL;
@@ -182,7 +193,7 @@ int main(int argc, char *argv[])
 
   while ((o=getopt(argc, argv, "i:o:d:m:t:H:h:V:v:S:s:I:L:P:C:RD0")) != -1) {
     switch (o) {
-    case 'i': infilename=optarg; break;
+    case 'i': dumpfilename=optarg; break;
     case 'o': outfilename=optarg; break;
     case 'd': deffilename=optarg; break;
     case 'm': mival=atoi(optarg); break;
@@ -264,45 +275,43 @@ int main(int argc, char *argv[])
     }
   }
 
-  if (!infilename || !outfilename) {
+  if (!dumpfilename || !outfilename) {
     usage(argv[0]);
     return -1;
   }
     
-  if (!(infile=fopen(infilename, "rb"))) { perror(infilename); return -2; }
-  if (fread(&wtmp, sizeof(wtmp), 1, infile) != 1) {
+  if (!(dumpfile=fopen(dumpfilename, "rb"))) { perror(dumpfilename); return -2; }
+  if (fread(&header, sizeof(header), 1, dumpfile) != 1) {
     perror("fread()");
     return -2;
   }
-  if (fread(&htmp, sizeof(htmp), 1, infile) != 1) {
-    perror("fread()");
-    return -2;
+  width=ntohl(header.width);
+  height=ntohl(header.height);
+  if (ntohl(header.maxiter) != mival) {
+    fprintf(stderr, "Warning: Changing value of maxiter to %d as read from file!\n", ntohl(header.maxiter));
   }
-  width=ntohl(wtmp);
-  height=ntohl(htmp);
-  printf("[%ld x %ld]\n", width, height);
-  if (!(buffer=(unsigned int *)malloc(width*height*sizeof(unsigned int)))) {
-    perror("malloc()");
-    return -3;
+  mival=ntohl(header.maxiter);
+  printf("Mapping file, [%d x %d] pixels\n", width, height);
+  if ((dumpbuffer=(int *)mmap(NULL,
+			      sizeof(header) + 
+			      sizeof(int) * (width * height),
+			       PROT_READ,
+			       MAP_SHARED,
+			       fileno(dumpfile),
+			       0)) == MAP_FAILED) {
+    perror("mmap()");
+    return 4;
   }
-  if ((n=fread(buffer, sizeof(unsigned int), width*height, infile)) != width*height) {
-    height=n/width;
-    printf("fread() returned %lu bytes. height is %lu\n", n, height);
-    /*    return -4;*/
-  }
-
-  fclose(infile);
-
-  for (i=0; i<n; i++) {
-    buffer[i]=ntohl(buffer[i]);
-  }
+  printf("Done.\n"); fflush(stdout);
   vmax=0;
   maxiter=0;
-  for (y=0; y<height; y++)
+  for (y=0; y<height; y++) {
     for (x=0; x<width; x++){
-      /*      printf("0x%04X\n", buffer[x + y*width]);*/
-      if (buffer[x + y * width] != -1 && buffer[x + y*width] != mival && buffer[x + y*width] > vmax) vmax=buffer[x + y*width];
+      int val = ntohl(dumpbuffer[4 + x + y * width]);
+      if (val != -1 && val != mival && val > vmax) vmax=val;
     }
+  }
+  printf("Allocating histogram buffer.\n"); fflush(stdout);
   if (!(hist=(unsigned int *)malloc((vmax+1) * sizeof(unsigned int)))) {
     perror("malloc()");
     return -3;
@@ -311,9 +320,10 @@ int main(int argc, char *argv[])
   memset(hist, 0, (vmax+1) * sizeof(unsigned int));
   for (y=0; y<height; y++)
     for (x=0; x<width; x++) {
-      if (buffer[x + y * width] != -1) {
-	if (buffer[x + y*width] != mival)
-	  hist[buffer[x + y*width]]++;
+      int val=ntohl(dumpbuffer[4 + x + y * width]);
+      if (val != -1) {
+	if (val != mival)
+	  hist[val]++;
 	else
 	  maxiter++;
       }
@@ -321,6 +331,8 @@ int main(int argc, char *argv[])
   for (j=vmax; j>0 && hist[j]<hival_threshold; j--);
   for (i=0; i<=j; i++)
     if (hist[i] > 0) break;
+
+  free(hist);
 
   loval=i;
   if (loval>0) loval--;
@@ -331,11 +343,6 @@ int main(int argc, char *argv[])
     printf("Changing loval from %lu to 0.\n", loval);
     loval=0;
   }
-
-  nmax=0;
-
-  for (i=0; i<vmax+1; i++)
-    if (hist[i] > nmax) nmax = hist[i];
 
   printf("maxiter\t%lu\nlow val\t%lu\nhigh val\t%lu\n", maxiter, loval, hival); fflush(stdout);
 
@@ -425,7 +432,7 @@ int main(int argc, char *argv[])
 
 				if (!skip) {
 				  sprintf(tmpbuf1, "%s %s", __FILE__, __DATE__);
-				  sprintf(tmpbuf2, "%s", infilename);
+				  sprintf(tmpbuf2, "%s", dumpfilename);
 				  if (!(th = TargaOpen(currentoutfilename, width, height, tmpbuf1, tmpbuf2, 1))) return -2;
 
 				  sprintf(tmpbuf1, "-H%Lg -h%Lg -S%Lg -s%Lg -V%Lg -v%Lg -I %c%c%c -L %c%c%c -P%c%c%c%s\n",
@@ -437,21 +444,21 @@ int main(int argc, char *argv[])
 				  TargaAddComment(th, tmpbuf1);
 
 				  if (deffilename) {
-				    if (!(infile=fopen(deffilename, "r"))) perror(deffilename);
+				    if (!(deffile=fopen(deffilename, "r"))) perror(deffilename);
 				    else {
-				      if (fscanf(infile, "%60Lf\n", &def_x) != 1) {
+				      if (fscanf(deffile, "%60Lf\n", &def_x) != 1) {
 					perror("fscanf()");
 					return -2;
 				      }
-				      if (fscanf(infile, "%60Lf\n", &def_y) != 1) {
+				      if (fscanf(deffile, "%60Lf\n", &def_y) != 1) {
 					perror("fscanf()");
 					return -2;
 				      }
-				      if (fscanf(infile, "%60Lf\n", &def_dx) != 1) {
+				      if (fscanf(deffile, "%60Lf\n", &def_dx) != 1) {
 					perror("fscanf()");
 					return -2;
 				      }
-				      fclose(infile);
+				      fclose(deffile);
 				      sprintf(tmpbuf1, "x=%.50Lg", def_x);
 				      TargaAddComment(th, tmpbuf1);
 				      sprintf(tmpbuf1, "y=%.50Lg", def_y);
@@ -467,7 +474,7 @@ int main(int argc, char *argv[])
 				  for (y=0; y<height; y++) {
 				    fprintf(stderr,"  Line: %d\r",y);
 				    for (x=0; x<width; x++) {
-				      unsigned int colornum=buffer[x+y*width];
+				      unsigned int colornum=ntohl(dumpbuffer[4 + x + y * width]);
 				      if (colornum == -1) {
 					r=255;
 					g=0;
@@ -535,7 +542,10 @@ int main(int argc, char *argv[])
       }
     }
   }
-  free(hist);
-  free(buffer);
+  if (munmap(dumpbuffer, sizeof(header) + sizeof(int) * (header.width * header.height)) == -1) {
+    perror("munmap()");
+  }
+  
+  fclose(dumpfile);
   return 0;
 }
