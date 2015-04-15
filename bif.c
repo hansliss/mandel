@@ -30,11 +30,20 @@ void usage(char *progname) {
   fprintf(stderr,"Usage: %s -o <out file> -w <width> -h <height> -m <max iterations> [-M <initial iterations>]\n", progname);
 }
 
+typedef struct fileheader_s {
+  int width;
+  int height;
+  int maxiter;
+  int reserved;
+} fileheader;
+
 int main(int argc,char *argv[]) {
   int o, x, y;
 
   char *dumpfilename=NULL;
   FILE *dumpfile;
+
+  fileheader header;
 
   int i;
 
@@ -43,7 +52,8 @@ int main(int argc,char *argv[]) {
   unsigned long maxiter=1048576L;
   unsigned long miniter=50000;
 
-  static int *dumpbuffer=NULL;
+  int *dumpbuffer=NULL;
+  int *ybuffer=NULL;
 
   while ((o=getopt(argc, argv, "o:w:h:m:M:")) != EOF) {
     switch (o) {
@@ -66,7 +76,7 @@ int main(int argc,char *argv[]) {
     return -2;
   }
 
-  lseek(fileno(dumpfile), sizeof(width) + sizeof(height) + sizeof(int)*(width*height-1), SEEK_SET);
+  lseek(fileno(dumpfile), sizeof(header) + sizeof(int)*(width*height-1), SEEK_SET);
   int tmpval=0;
   if (write(fileno(dumpfile), &tmpval, sizeof(tmpval)) == -1) {
     perror("write()");
@@ -74,7 +84,7 @@ int main(int argc,char *argv[]) {
   }
 
   if ((dumpbuffer=(int *)mmap(NULL,
-			      sizeof(width) + sizeof(width) + 
+			      sizeof(header) + 
 			      sizeof(int) * (width * height),
 			       PROT_READ|PROT_WRITE,
 			       MAP_SHARED,
@@ -86,22 +96,27 @@ int main(int argc,char *argv[]) {
   
   fprintf(stderr, "Initializing file...\n");
 
-  dumpbuffer[0]=htonl(width);
-  dumpbuffer[2]=htonl(height);
-  msync(&(dumpbuffer[0]), 4 * sizeof(int), MS_ASYNC);
+  header.width=htonl(width);
+  header.height=htonl(height);
+  header.maxiter=htonl(maxiter);
+  header.reserved=0;
+
+  memcpy(dumpbuffer, &header, sizeof(header));
+
   for (y=0; y<height; y++) {
     fprintf(stderr, "%d\r", y);
     for (x=0; x<width; x++) {
       dumpbuffer[4 + x + y * width] = 0;
     }
-    msync(&(dumpbuffer[4 + y*width]), width * sizeof(int), MS_ASYNC);
   }
   
   fprintf(stderr, "Done.    \n");
+  ybuffer=(int *)malloc(height * sizeof(int));
 
   for (x=0; x<width; x++) {
     double xval=XMIN + (XMAX - XMIN)*(double)x/(double)width;
     fprintf(stderr, "%d     %g	\r", x, xval);
+    for (y=0; y<height; y++) ybuffer[y]=0;
     int done=0;
     int final_at=0;
     int y;
@@ -111,23 +126,25 @@ int main(int argc,char *argv[]) {
       yval = xval * yval * (1 - yval);
       y=height - height * ((yval - YMIN)/(YMAX - YMIN))- 1;
       if (i++ > miniter && y >= 0 && y < height) {
-	if (dumpbuffer[4 + x + y * width] < maxiter) {
-	  if (++dumpbuffer[4 + x + y * width] == maxiter && final_at == 0) {
-	    final_at = i;
+	if (ybuffer[y] < maxiter) {
+	  if (++ybuffer[y] == maxiter && final_at == 0) {
+	    final_at = 100;
 	  }
 	}
-	if (final_at && i == final_at * 2) {
-	  done=1;
-	}
+      }
+      if (final_at > 0 && !(--final_at)) {
+	done=1;
       }
     }
     for (y=0; y<height; y++) {
-      dumpbuffer[4 + x + y * width] = htonl(dumpbuffer[4 + x + y * width]);
+      dumpbuffer[4 + x + y * width] = htonl(ybuffer[y]);
     }
   }
-  
+
+  free(ybuffer);
+
   fprintf(stderr, "Done.    \n");
-  if (munmap(dumpbuffer, sizeof(long) * 2 + sizeof(int) * (width * height)) == -1) {
+  if (munmap(dumpbuffer, sizeof(header) + sizeof(int) * (width * height)) == -1) {
     perror("munmap()");
   }
 
