@@ -471,8 +471,8 @@ int main(int argc,char *argv[]) {
 	  if (val == oldmaxiter)
 	    dumpbuffer[4 + x + y * width] = htonl(-1);
 	}
-	msync(&(dumpbuffer[4 + y * width]), width * sizeof(int), MS_ASYNC);
       }
+      dumpbuffer[2] = htonl(maxiter);
       fprintf(stderr, "Done.    \n");
     }
     break;
