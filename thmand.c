@@ -26,7 +26,7 @@ FILE *logfile;
 
 #define FLOAT long double
 
-#define MAX_CHECK_SIZE 1000
+#define MAX_CHECK_SIZE 10000
 #define MAX_RENDER_SIZE 50
 
 #define THMAND_MODE_INITIALIZE 0
