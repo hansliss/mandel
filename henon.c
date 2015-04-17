@@ -27,7 +27,7 @@
 #define YMIN 0.4
 
 void usage(char *progname) {
-  fprintf(stderr,"Usage: %s -o <out file> -w <width> -h <height> -m <max iterations> [-M <initial iterations>]\n", progname);
+  fprintf(stderr,"Usage: %s -o <out file> -w <width> -h <height> -m <max iterations> [-M <initial iterations>] [-F <final iterations after reaching maxiter>]\n", progname);
 }
 
 typedef struct fileheader_s {
@@ -49,6 +49,7 @@ int main(int argc,char *argv[]) {
   long height=0;
   unsigned long maxiter=1048576L;
   unsigned long miniter=50000;
+  unsigned long finalrun=1000000;
 
   double a = 1.4;
   double b = 0.3;
@@ -56,13 +57,14 @@ int main(int argc,char *argv[]) {
   int *dumpbuffer=NULL;
   int *ybuffer=NULL;
 
-  while ((o=getopt(argc, argv, "o:w:h:m:M:")) != EOF) {
+  while ((o=getopt(argc, argv, "o:w:h:m:M:F:")) != EOF) {
     switch (o) {
     case 'o': dumpfilename=optarg; break;
     case 'w': width=atoi(optarg); break;
     case 'h': height=atoi(optarg); break;
     case 'm': maxiter=atoi(optarg); break;
     case 'M': miniter=atoi(optarg); break;
+    case 'F': finalrun=atoi(optarg); break;
     default: usage(argv[0]); return -1; break;
     }
   }
@@ -120,11 +122,14 @@ int main(int argc,char *argv[]) {
   int xpmax=0, ypmax=0, xpmin = width-1, ypmin = height-1;
   int done=0, final_at=0;
   int mitigator=0;
+  int lastcount=0, maxiter_hits=0;
   while (!done) {
-    if ((++mitigator) % 100 == 0) {
+    if ((++mitigator) % 100 == 0 && maxcount != lastcount) {
       fprintf(stderr, "(%d,%d),(%d,%d) maxcount=%d     \r", xpmin,ypmin,xpmax,ypmax,maxcount);
       mitigator = 0;
+      lastcount=maxcount;
     }
+
     double newy = b * xval;
     double newx = 1 - a * xval * xval + yval;
     xval = newx;
@@ -139,12 +144,17 @@ int main(int argc,char *argv[]) {
     if (y > ypmax) ypmax = y;
 
     if (x > 0 && y > 0 && x < width && y < height) {
-      if ((count = ++dumpbuffer[4 + x + y * width]) >= maxiter && final_at == 0) {
-	final_at = 1000;
-      }
-      if (count > maxcount) maxcount = count;
-      if (final_at > 0 && !(--final_at)) {
-	done = 1;
+      if (dumpbuffer[4 + x + y * width] < maxiter) {
+	if ((count = ++dumpbuffer[4 + x + y * width]) >= maxiter) {
+	  maxiter_hits++;
+	  if (maxiter_hits >= 50000 && final_at == 0) {
+	    final_at = finalrun;
+	  }
+	}
+	if (count > maxcount) maxcount = count;
+	if (final_at > 0 && !(--final_at)) {
+	  done = 1;
+	}
       }
     }
   }
