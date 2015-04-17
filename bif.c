@@ -37,6 +37,35 @@ typedef struct fileheader_s {
   int reserved;
 } fileheader;
 
+int doXPoint(int x, int width, int height, int *dumpbuffer, int *ybuffer, int miniter, int maxiter, int count) {
+  int y;
+  double xval=XMIN + (XMAX - XMIN)*(double)x/(double)width;
+  fprintf(stderr, "%d     %g	\r", x, xval);
+  for (y=0; y<height; y++) ybuffer[y]=0;
+  int done=0;
+  int final_at=0;
+  double yval=0.5;
+  int i = 0;
+  while (!done) {
+    yval = xval * yval * (1 - yval);
+    y=height - height * ((yval - YMIN)/(YMAX - YMIN))- 1;
+    if (i++ > miniter && y >= 0 && y < height) {
+      if (ybuffer[y] < maxiter) {
+	if (++ybuffer[y] == maxiter && final_at == 0) {
+	  final_at = 100;
+	}
+      }
+    }
+    if ((count != 0 && i == count) || (count == 0 && final_at > 0 && !(--final_at))) {
+      done=1;
+    }
+  }
+  for (y=0; y<height; y++) {
+    dumpbuffer[4 + x + y * width] = htonl(ybuffer[y]);
+  }
+  return i;
+}
+
 int main(int argc,char *argv[]) {
   int o, x, y;
 
@@ -44,8 +73,6 @@ int main(int argc,char *argv[]) {
   FILE *dumpfile;
 
   fileheader header;
-
-  int i;
 
   long width=0;
   long height=0;
@@ -113,31 +140,13 @@ int main(int argc,char *argv[]) {
   fprintf(stderr, "Done.    \n");
   ybuffer=(int *)malloc(height * sizeof(int));
 
+  int refx = width * 0.8;
+
+  int count=doXPoint(refx, width, height, dumpbuffer, ybuffer, miniter, maxiter, 0);
+
   for (x=0; x<width; x++) {
-    double xval=XMIN + (XMAX - XMIN)*(double)x/(double)width;
-    fprintf(stderr, "%d     %g	\r", x, xval);
-    for (y=0; y<height; y++) ybuffer[y]=0;
-    int done=0;
-    int final_at=0;
-    int y;
-    double yval=0.5;
-    i = 0;
-    while (!done) {
-      yval = xval * yval * (1 - yval);
-      y=height - height * ((yval - YMIN)/(YMAX - YMIN))- 1;
-      if (i++ > miniter && y >= 0 && y < height) {
-	if (ybuffer[y] < maxiter) {
-	  if (++ybuffer[y] == maxiter && final_at == 0) {
-	    final_at = 100;
-	  }
-	}
-      }
-      if (final_at > 0 && !(--final_at)) {
-	done=1;
-      }
-    }
-    for (y=0; y<height; y++) {
-      dumpbuffer[4 + x + y * width] = htonl(ybuffer[y]);
+    if (x != refx) {
+      doXPoint(x, width, height, dumpbuffer, ybuffer, miniter, maxiter, count);
     }
   }
 

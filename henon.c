@@ -55,7 +55,6 @@ int main(int argc,char *argv[]) {
   double b = 0.3;
 
   int *dumpbuffer=NULL;
-  int *ybuffer=NULL;
 
   while ((o=getopt(argc, argv, "o:w:h:m:M:F:")) != EOF) {
     switch (o) {
@@ -114,7 +113,6 @@ int main(int argc,char *argv[]) {
   }
   
   fprintf(stderr, "Done.    \n");
-  ybuffer=(int *)malloc(height * sizeof(int));
 
   double xval = 0.5;
   double yval = 0.5;
