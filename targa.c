@@ -159,13 +159,7 @@ void TargaRead(TargaHandle h, unsigned char *r, unsigned char *g, unsigned char 
 }
 
 int TargaSeek(TargaHandle h, unsigned long pos) {
-  TargaHeader fileheader;
-  fseek(h->file, 0, SEEK_SET);
-  if (fread(&fileheader, sizeof(fileheader), 1, h->file) == 1) {
-    TargaFixHeader(&fileheader);
-    return (!fseek(h->file, (long)(18+fileheader.IDFieldSize+(pos*3)), SEEK_SET));
-  }
-  return 0;
+  return (!fseek(h->file, (long)(sizeof(struct TargaHeader_s)+strlen(h->jobname)+1+(pos*3)), SEEK_SET));
 }
 
 void TargaEnd(TargaHandle h) {
