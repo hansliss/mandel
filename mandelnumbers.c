@@ -20,8 +20,8 @@
 
 
 /*
-  .*.  .*.  **.  **.  *.*  ***  ..*  ***  .*.  .*.
-  *.*  **.  ..*  ..*  *.*  *..  .*.  ..*  *.*  *.*
+  .*.  .*.  **.  **.  *.*  ***  .*.  ***  .*.  .*.
+  *.*  **.  ..*  ..*  *.*  *..  *..  ..*  *.*  *.*
   *.*  .*.  .*.  **.  ***  **.  **.  .*.  .*.  .**
   *.*  .*.  *..  ..*  ..*  ..*  *.*  .*.  *.*  ..*
   .*.  ***  ***  **.  ..*  **.  .*.  .*.  .*.  .*.
@@ -34,19 +34,32 @@
 #define BOXWIDTH ((MAXDIGITS) * (FONTWIDTH + 1) + 2 + 1)
 #define BOXHEIGHT ((FONTHEIGHT) + 2 + 1)
 
-static unsigned char font[10*FONTHEIGHT]={0x02,0x05,0x05,0x05,0x02,0x02,0x06,0x02,0x02,0x07,0x06,0x01,0x02,0x04,0x07,0x06,0x01,0x06,0x01,0x06,0x05,0x05,0x07,0x01,0x01,0x07,0x04,0x06,0x01,0x06,0x01,0x02,0x06,0x05,0x02,0x07,0x01,0x02,0x02,0x02,0x02,0x05,0x02,0x05,0x02,0x02,0x05,0x03,0x01,0x02};
+static unsigned char font[10*FONTHEIGHT]={
+  0x02,0x05,0x05,0x05,0x02,
+  0x02,0x06,0x02,0x02,0x07,
+  0x06,0x01,0x02,0x04,0x07,
+  0x06,0x01,0x06,0x01,0x06,
+  0x05,0x05,0x07,0x01,0x01,
+  0x07,0x04,0x06,0x01,0x06,
+  0x02,0x04,0x06,0x05,0x02,
+  0x07,0x01,0x02,0x02,0x02,
+  0x02,0x05,0x02,0x05,0x02,
+  0x02,0x05,0x03,0x01,0x02
+};
 
 
 void writedigit(int digit, unsigned char r, unsigned char g, unsigned char b, unsigned char rb, unsigned char gb, unsigned char bb, int xpos, int ypos, TargaHandle file) {
   int x, y;
   for (x=0; x<=FONTWIDTH; x++) {
     for (y=0; y<=FONTHEIGHT; y++) {
-      int offset = x + xpos + (y + ypos) * file->width;
-      TargaSeek(file, offset);
-      if (x < FONTWIDTH && y < FONTHEIGHT && font[digit * FONTHEIGHT + y]&(1<<(FONTWIDTH-x-1))) {
-	TargaWrite(file, r, g, b);
-      } else {
-	TargaWrite(file, rb, gb, bb);
+      if (x + xpos < file->width && y + ypos < file->height) {
+	int offset = x + xpos + (y + ypos) * file->width;
+	TargaSeek(file, offset);
+	if (x < FONTWIDTH && y < FONTHEIGHT && font[digit * FONTHEIGHT + y]&(1<<(FONTWIDTH-x-1))) {
+	  TargaWrite(file, r, g, b);
+	} else {
+	  TargaWrite(file, rb, gb, bb);
+	}
       }
     }
   }
@@ -125,28 +138,38 @@ void dobox(int number, int maxiter, int xpos, int ypos, TargaHandle file) {
   int offset;
   for (x = 0; x < BOXWIDTH; x++) {
     y=0;
-    offset=(x+xpos + (y+ypos)*file->width);
-    TargaSeek(file, offset);
-    TargaWrite(file, 0xE0, 0xA0, 0xA0);
-    y=BOXHEIGHT;
-    offset=(x+xpos + (y+ypos)*file->width);
-    TargaSeek(file, offset);
-    TargaWrite(file, 0xE0, 0xA0, 0xA0);
-    for (y=1; y < BOXHEIGHT; y++) {
+    if (x + xpos < file->width && y + ypos < file->height) {
       offset=(x+xpos + (y+ypos)*file->width);
       TargaSeek(file, offset);
-      TargaWrite(file, r, g, b);
+      TargaWrite(file, 0xE0, 0xA0, 0xA0);
+    }
+    y=BOXHEIGHT;
+    if (x + xpos < file->width && y + ypos < file->height) {
+      offset=(x+xpos + (y+ypos)*file->width);
+      TargaSeek(file, offset);
+      TargaWrite(file, 0xE0, 0xA0, 0xA0);
+    }
+    for (y=1; y < BOXHEIGHT; y++) {
+      if (x + xpos < file->width && y + ypos < file->height) {
+	offset=(x+xpos + (y+ypos)*file->width);
+	TargaSeek(file, offset);
+	TargaWrite(file, r, g, b);
+      }
     }
   }
   for (y = 0; y < BOXHEIGHT; y++) {
     x=0;
-    offset=(x+xpos + (y+ypos)*file->width);
-    TargaSeek(file, offset);
-    TargaWrite(file, 0xE0, 0xA0, 0xA0);
-    x=BOXWIDTH;
-    offset=(x+xpos + (y+ypos)*file->width);
-    TargaSeek(file, offset);
-    TargaWrite(file, 0xE0, 0xA0, 0xA0);
+    if (x + xpos < file->width && y + ypos < file->height) {
+      offset=(x+xpos + (y+ypos)*file->width);
+      TargaSeek(file, offset);
+      TargaWrite(file, 0xE0, 0xA0, 0xA0);
+    }
+      x=BOXWIDTH;
+    if (x + xpos < file->width && y + ypos < file->height) {
+      offset=(x+xpos + (y+ypos)*file->width);
+      TargaSeek(file, offset);
+      TargaWrite(file, 0xE0, 0xA0, 0xA0);
+    }
   }
   writenumber(number, rf, gf, bf, r, g, b, xpos + 2, ypos + 2, file);
 }
@@ -310,15 +333,15 @@ int main(int argc, char *argv[]) {
   TargaAddComment(th, "");
 
   long double x0_ld, y0_ld, x1_ld, y1_ld, xval_ld, yval_ld;
-  printf("(using \"long double\" arithmetic)\n");
+
   x0_ld=mpf_get_d(x0);
   y0_ld=mpf_get_d(y0);
   x1_ld=mpf_get_d(x1);
   y1_ld=mpf_get_d(y1);
-  for (y = 0; y < (height - BOXHEIGHT); y += BOXHEIGHT) {
+  for (y = 0; y < height; y += BOXHEIGHT) {
     fprintf(stderr,"  Line: %d\r",y);
     yval_ld = y0_ld + (y1_ld - y0_ld)*(long double)(height-y)/(long double)height;
-    for (x = 0; x < (width - BOXWIDTH); x += BOXWIDTH) {
+    for (x = 0; x < width; x += BOXWIDTH) {
       xval_ld = x0_ld + (x1_ld - x0_ld)*(long double)x/(long double)width;
       val=ld_mandel(xval_ld, yval_ld, maxiter);
       dobox(val, maxiter, x, y, th);
