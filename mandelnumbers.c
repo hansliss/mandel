@@ -29,7 +29,7 @@
 
 #define FONTWIDTH 3
 #define FONTHEIGHT 5
-#define MAXDIGITS 3
+#define MAXDIGITS 2
 
 #define BOXWIDTH ((MAXDIGITS) * (FONTWIDTH + 1) + 2 + 1)
 #define BOXHEIGHT ((FONTHEIGHT) + 2 + 1)
