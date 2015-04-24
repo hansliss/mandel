@@ -29,6 +29,12 @@ FILE *logfile;
 #define MAX_CHECK_SIZE 10000
 #define MAX_RENDER_SIZE 50
 
+#define SPEED_MAX ((long double)6.8)
+
+#define MODE_NORMAL 0
+#define MODE_SPEED 1
+#define MODE_ANGLE 2
+
 #define THMAND_MODE_INITIALIZE 0
 #define THMAND_MODE_CONTINUE 1
 #define THMAND_MODE_UPDATE 2
@@ -113,6 +119,7 @@ struct taskconfig {
   unsigned int x1;
   unsigned int y1;
   unsigned long maxiter;
+  int mode;
   int done;
   pthread_mutex_t *lock;
 };
@@ -175,6 +182,42 @@ unsigned long mandel(FLOAT cx, FLOAT cy, unsigned long maxiter) {
   return maxiter-i;
 }
  
+unsigned long mandelspeed(FLOAT cx, FLOAT cy, unsigned long maxiter) {
+  unsigned long i=maxiter;
+  FLOAT zx=cx,zy=cy,zx2=cx*cx,zy2=cy*cy;
+  long double ox=cx,oy=cy;
+  while((i>0)&&(zx2+zy2 < 4.0)) {
+    ox=zx;oy=zy;
+    zy=2*zx*zy + cy;
+    zx=zx2-zy2 + cx;
+    zx2=zx*zx;
+    zy2=zy*zy;
+    i--;
+  }
+#ifdef DEBUG
+  fprintf(logfile,"mandel=%u, maxiter=%u\n",i,maxiter);
+#endif
+  return (unsigned long)((long double)maxiter * sqrt((zx-ox)*(zx-ox)+(zy-oy)*(zy-oy)) / SPEED_MAX);
+}
+ 
+unsigned long mandelangle(FLOAT cx, FLOAT cy, unsigned long maxiter) {
+  unsigned long i=maxiter;
+  FLOAT zx=cx,zy=cy,zx2=cx*cx,zy2=cy*cy;
+  long double ox=cx,oy=cy;
+  while((i>0)&&(zx2+zy2 < 4.0)) {
+    ox=zx;oy=zy;
+    zy=2*zx*zy + cy;
+    zx=zx2-zy2 + cx;
+    zx2=zx*zx;
+    zy2=zy*zy;
+    i--;
+  }
+#ifdef DEBUG
+  fprintf(logfile,"mandel=%u, maxiter=%u\n",i,maxiter);
+#endif
+  return (unsigned long)(maxiter*(3.1415926535+atan2((zx-ox),(zy-oy)))/6.28320);
+}
+ 
 void *run_checkfilled(void *cfgi) {
   unsigned int x,y;
   int filled=1;
@@ -182,6 +225,8 @@ void *run_checkfilled(void *cfgi) {
   int x0, x1, y0, y1;
   int changedpixels=0;
   struct taskconfig *cfg = (struct taskconfig *)cfgi;
+
+  if (cfg->mode != MODE_NORMAL) return NULL;
 
   x0 = cfg->x0;
   x1 = cfg->x1;
@@ -265,7 +310,18 @@ void *run_dowork(void *cfgi) {
       val = ntohl(dumpbuffer[4 + x + y * width]);
       if (val == -1) {
 	xval=XVAL(x);
-	val=mandel(xval, yval, cfg->maxiter);
+	switch (cfg->mode) {
+	case MODE_SPEED:
+	  val=mandelspeed(xval, yval, cfg->maxiter);
+	  break;
+	case MODE_ANGLE:
+	  val=mandelangle(xval, yval, cfg->maxiter);
+	  break;
+	case MODE_NORMAL:
+	default:
+	  val=mandel(xval, yval, cfg->maxiter);
+	  break;
+	}
 	dumpbuffer[4 + x + y * width] = htonl(val);
       }
       changedpixels++;
@@ -281,7 +337,7 @@ void *run_dowork(void *cfgi) {
 }
 
 void usage(char *progname) {
-  fprintf(stderr,"Usage: %s -d <def. file> -o <out file> -w <width> -h <height> -m <max iterations> [-p <cpu cores>] [-O <old max iterations>]\n", progname);
+  fprintf(stderr,"Usage: %s -d <def. file> -o <out file> -w <width> -h <height> -m <max iterations> [-p <cpu cores>] [-O <old max iterations>] [-M <mode: s for speed, a for angle>]\n", progname);
   fprintf(stderr,"\tWhere <file> contains three values, each on one line:\n");
   fprintf(stderr,"\t  center X\n\t  center Y\n\t  width.\n");
 }
@@ -299,6 +355,7 @@ void quadsplit(workitem *stack, workitem current) {
 int main(int argc,char *argv[]) {
   static struct taskconfig *cfg=NULL;
   static pthread_t *threads=NULL;
+  int mode=MODE_NORMAL;
 
   fileheader header;
 
@@ -325,7 +382,7 @@ int main(int argc,char *argv[]) {
   long totpix=(long)width*height;
 
   snprintf(logprefix, sizeof(logprefix), "thmand: ");
-  while ((o=getopt(argc, argv, "d:o:p:w:h:m:O:")) != EOF) {
+  while ((o=getopt(argc, argv, "d:o:p:w:h:m:O:M:")) != EOF) {
     switch (o) {
     case 'd': deffilename=optarg; break;
     case 'o': dumpfilename=optarg; break;
@@ -334,6 +391,7 @@ int main(int argc,char *argv[]) {
     case 'h': height=atoi(optarg); break;
     case 'm': maxiter=atoi(optarg); break;
     case 'O': oldmaxiter=atoi(optarg); break;
+    case 'M': if (optarg[0] == 's') mode=MODE_SPEED; else if (optarg[0] == 'a') mode=MODE_ANGLE; break;
     default: usage(argv[0]); return -1; break;
     }
   }
@@ -478,7 +536,10 @@ int main(int argc,char *argv[]) {
     break;
   }
     
-  for (tempindex=0; tempindex<ncores; tempindex++) cfg[tempindex].taskid=-1;
+  for (tempindex=0; tempindex<ncores; tempindex++) {
+    cfg[tempindex].taskid = -1;
+    cfg[tempindex].mode = mode;
+  }
 
   point_x0=centx-dx/2;
   point_x1=centx+dx/2;
