@@ -34,6 +34,7 @@ FILE *logfile;
 #define MODE_NORMAL 0
 #define MODE_SPEED 1
 #define MODE_ANGLE 2
+#define MODE_DE 3
 
 #define THMAND_MODE_INITIALIZE 0
 #define THMAND_MODE_CONTINUE 1
@@ -217,6 +218,40 @@ unsigned long mandelangle(FLOAT cx, FLOAT cy, unsigned long maxiter) {
 #endif
   return (unsigned long)(maxiter*(3.1415926535+atan2((zx-ox),(zy-oy)))/6.28320);
 }
+
+/*
+    dz = 2 z dz + 1
+    2 * (zx + zy * i)(dzx + dzy * i) + 1
+    2 * (zx * (dzx + dzy * i) + zy * i * (dzx + dzy * i)) + 1
+    2 * (zx * dzx + zx * dzy * i + zy * dzx * i - zy * dzy) + 1
+    2 * zx * dzx - 2 * zy * dzy + (2 * zx * dzy + 2* zy * dzx) * i + 1
+*/ 
+unsigned long mandelde(FLOAT cx, FLOAT cy, unsigned long maxiter) {
+  unsigned long i=maxiter;
+  FLOAT zx=cx,zy=cy,zx2=cx*cx,zy2=cy*cy;
+  FLOAT dzx = 0, dzy = 0;
+  while((i>0)&&(zx2+zy2 < 4.0)) {
+    FLOAT tmp = 2 * (zx * dzx - zy * dzy) + 1;
+    dzy = 2 * (zx * dzy + zy * dzx);
+    dzx = tmp;
+
+    zy=2*zx*zy + cy;
+    zx=zx2-zy2 + cx;
+    zx2=zx*zx;
+    zy2=zy*zy;
+    i--;
+  }
+#ifdef DEBUG
+  fprintf(logfile,"mandel=%u, maxiter=%u\n",i,maxiter);
+#endif
+  if (i == 0) return maxiter;
+  else {
+    FLOAT r = maxiter * log(log(zx2 + zy2) *
+			    sqrt((zx2 + zy2) / (dzx * dzx + dzy * dzy))) / 4;
+    if (r < 0) r=0;
+    return r;
+  }
+}
  
 void *run_checkfilled(void *cfgi) {
   unsigned int x,y;
@@ -317,6 +352,9 @@ void *run_dowork(void *cfgi) {
 	case MODE_ANGLE:
 	  val=mandelangle(xval, yval, cfg->maxiter);
 	  break;
+	case MODE_DE:
+	  val=mandelde(xval, yval, cfg->maxiter);
+	  break;
 	case MODE_NORMAL:
 	default:
 	  val=mandel(xval, yval, cfg->maxiter);
@@ -337,7 +375,7 @@ void *run_dowork(void *cfgi) {
 }
 
 void usage(char *progname) {
-  fprintf(stderr,"Usage: %s -d <def. file> -o <out file> -w <width> -h <height> -m <max iterations> [-p <cpu cores>] [-O <old max iterations>] [-M <mode: s for speed, a for angle>]\n", progname);
+  fprintf(stderr,"Usage: %s -d <def. file> -o <out file> -w <width> -h <height> -m <max iterations> [-p <cpu cores>] [-O <old max iterations>] [-M <mode: s for speed, a for angle, d for distance estimator>]\n", progname);
   fprintf(stderr,"\tWhere <file> contains three values, each on one line:\n");
   fprintf(stderr,"\t  center X\n\t  center Y\n\t  width.\n");
 }
@@ -391,7 +429,15 @@ int main(int argc,char *argv[]) {
     case 'h': height=atoi(optarg); break;
     case 'm': maxiter=atoi(optarg); break;
     case 'O': oldmaxiter=atoi(optarg); break;
-    case 'M': if (optarg[0] == 's') mode=MODE_SPEED; else if (optarg[0] == 'a') mode=MODE_ANGLE; break;
+    case 'M':
+      if (optarg[0] == 's') {
+	mode=MODE_SPEED;
+      } else if (optarg[0] == 'a') {
+	mode=MODE_ANGLE;
+      } else if (optarg[0] == 'd') {
+	mode=MODE_DE;
+      }
+      break;
     default: usage(argv[0]); return -1; break;
     }
   }
