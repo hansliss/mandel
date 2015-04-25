@@ -262,7 +262,7 @@ void *run_checkfilled(void *cfgi) {
   int changedpixels=0;
   struct taskconfig *cfg = (struct taskconfig *)cfgi;
 
-  if (cfg->mode != MODE_NORMAL) return NULL;
+  if (cfg->mode != MODE_NORMAL && cfg->mode != MODE_DE) return NULL;
 
   x0 = cfg->x0;
   x1 = cfg->x1;
