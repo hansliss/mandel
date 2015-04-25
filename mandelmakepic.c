@@ -138,7 +138,7 @@ void usage(char *progname) {
   fprintf(stderr, "\t[-L <log spec for h, s and v value: 3 characters, where \"1\" means we use log() of the corr. value>]\n");
   fprintf(stderr, "\t[-P <prop spec for h, s and v value: 3 characters, where \"1\" means factors are proportional>]\n");
   fprintf(stderr, "\t[-R (remove more or less all-black or all-white images)] [-D (build directory structure)]\n");
-  fprintf(stderr, "\t[-0 (unconditional set loval=0)]\n");
+  fprintf(stderr, "\t[-z <loval>] [-Z <hival>]\n");
 }
 
 void handler(int s)
@@ -170,7 +170,8 @@ int main(int argc, char *argv[])
   int hi_s=0, hl_s=0, si_s=1, sl_s=0, vi_s=1, vl_s=0, hp_s=0, sp_s=0, vp_s=0;
   int mih=0, mis=0, miv=0, mlh=0, mls=0, mlv=0, mph=0, mps=0, mpv=0;
 
-  int use_zero_loval=0;
+  int use_loval=-1;
+  int use_hival=-1;
 
   struct stat statbuf;
 
@@ -191,7 +192,7 @@ int main(int argc, char *argv[])
 
   signal(SIGCHLD, handler);
 
-  while ((o=getopt(argc, argv, "i:o:d:m:t:H:h:V:v:S:s:I:L:P:C:RD0")) != -1) {
+  while ((o=getopt(argc, argv, "i:o:d:m:t:H:h:V:v:S:s:I:L:P:C:RDz:Z:")) != -1) {
     switch (o) {
     case 'i': dumpfilename=optarg; break;
     case 'o': outfilename=optarg; break;
@@ -201,7 +202,8 @@ int main(int argc, char *argv[])
     case 'C': scriptfilename=optarg; break;
     case 'R': remove_blacks=1; break;
     case 'D': build_subdirs=1; break;
-    case '0': use_zero_loval=1; break;
+    case 'z': use_loval=atoi(optarg); break;
+    case 'Z': use_hival=atoi(optarg); break;
     case 'H':
       if (sscanf(optarg, "%Lf,%i,%Lf", &hcs, &hcsteps, &hcdiff) != 3) {
 	hcsteps=1; hcdiff=0;
@@ -339,9 +341,14 @@ int main(int argc, char *argv[])
   hival=j;
   if (hival<vmax) hival++;
 
-  if (use_zero_loval) {
-    printf("Changing loval from %lu to 0.\n", loval);
-    loval=0;
+  if (use_loval != -1) {
+    printf("Changing loval from %lu to %d.\n", loval, use_loval);
+    loval=use_loval;
+  }
+
+  if (use_hival != -1) {
+    printf("Changing hival from %lu to %d.\n", hival, use_hival);
+    hival=use_hival;
   }
 
   printf("maxiter\t%lu\nlow val\t%lu\nhigh val\t%lu\n", maxiter, loval, hival); fflush(stdout);
@@ -435,12 +442,23 @@ int main(int argc, char *argv[])
 				  sprintf(tmpbuf2, "%s", dumpfilename);
 				  if (!(th = TargaOpen(currentoutfilename, width, height, tmpbuf1, tmpbuf2, 1))) return -2;
 
+				  tmpbuf2[0]='\0';
+				  if (use_loval != -1) {
+				    sprintf(tmpbuf2, "-z %d", use_loval);
+				  }
+
+				  if (use_hival != -1) {
+				    sprintf(tmpbuf1, "-Z %d", use_hival);
+				    if (strlen(tmpbuf2)) strcat(tmpbuf2, " ");
+				    strcat(tmpbuf2, tmpbuf1);
+				  }
+
 				  sprintf(tmpbuf1, "-H%Lg -h%Lg -S%Lg -s%Lg -V%Lg -v%Lg -I %c%c%c -L %c%c%c -P%c%c%c%s\n",
 					  hc, rhk, sc, rsk, vc, rvk,
 					  hi?'1':'0', si?'1':'0', vi?'1':'0',
 					  hl?'1':'0', sl?'1':'0', vl?'1':'0',
 					  hp?'1':'0', sp?'1':'0', vp?'1':'0',
-					  use_zero_loval?" -0":"");
+					  tmpbuf2);
 				  TargaAddComment(th, tmpbuf1);
 
 				  if (deffilename) {
