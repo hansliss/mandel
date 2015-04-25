@@ -120,6 +120,7 @@ struct taskconfig {
   unsigned int x1;
   unsigned int y1;
   unsigned long maxiter;
+  FLOAT de_k;
   int mode;
   int done;
   pthread_mutex_t *lock;
@@ -226,7 +227,7 @@ unsigned long mandelangle(FLOAT cx, FLOAT cy, unsigned long maxiter) {
     2 * (zx * dzx + zx * dzy * i + zy * dzx * i - zy * dzy) + 1
     2 * zx * dzx - 2 * zy * dzy + (2 * zx * dzy + 2* zy * dzx) * i + 1
 */ 
-unsigned long mandelde(FLOAT cx, FLOAT cy, unsigned long maxiter) {
+unsigned long mandelde(FLOAT cx, FLOAT cy, unsigned long maxiter, FLOAT k) {
   unsigned long i=maxiter;
   FLOAT zx=cx,zy=cy,zx2=cx*cx,zy2=cy*cy;
   FLOAT dzx = 0, dzy = 0;
@@ -247,9 +248,9 @@ unsigned long mandelde(FLOAT cx, FLOAT cy, unsigned long maxiter) {
   if (i == 0) return maxiter;
   else {
     FLOAT r = maxiter * log(log(zx2 + zy2) *
-			    sqrt((zx2 + zy2) / (dzx * dzx + dzy * dzy))) / 4;
-    if (r < 0) r=0;
-    return r;
+			    sqrt((zx2 + zy2) / (dzx * dzx + dzy * dzy))) / k;
+    if (r < 0) r=-r;
+    return ((long)r) % maxiter;
   }
 }
  
@@ -353,7 +354,7 @@ void *run_dowork(void *cfgi) {
 	  val=mandelangle(xval, yval, cfg->maxiter);
 	  break;
 	case MODE_DE:
-	  val=mandelde(xval, yval, cfg->maxiter);
+	  val=mandelde(xval, yval, cfg->maxiter, cfg->de_k);
 	  break;
 	case MODE_NORMAL:
 	default:
@@ -375,7 +376,7 @@ void *run_dowork(void *cfgi) {
 }
 
 void usage(char *progname) {
-  fprintf(stderr,"Usage: %s -d <def. file> -o <out file> -w <width> -h <height> -m <max iterations> [-p <cpu cores>] [-O <old max iterations>] [-M <mode: s for speed, a for angle, d for distance estimator>]\n", progname);
+  fprintf(stderr,"Usage: %s -d <def. file> -o <out file> -w <width> -h <height> -m <max iterations> [-p <cpu cores>] [-O <old max iterations>] [-M <mode: s for speed, a for angle, d for distance estimator>] [-K <K for DE alg>]\n", progname);
   fprintf(stderr,"\tWhere <file> contains three values, each on one line:\n");
   fprintf(stderr,"\t  center X\n\t  center Y\n\t  width.\n");
 }
@@ -415,12 +416,14 @@ int main(int argc,char *argv[]) {
   unsigned long filesize=0;
   int file_handling=THMAND_MODE_INITIALIZE;
 
+  FLOAT de_k=400;
+
   static pthread_mutex_t lock;
 
   long totpix=(long)width*height;
 
   snprintf(logprefix, sizeof(logprefix), "thmand: ");
-  while ((o=getopt(argc, argv, "d:o:p:w:h:m:O:M:")) != EOF) {
+  while ((o=getopt(argc, argv, "d:o:p:w:h:m:O:M:K:")) != EOF) {
     switch (o) {
     case 'd': deffilename=optarg; break;
     case 'o': dumpfilename=optarg; break;
@@ -429,6 +432,7 @@ int main(int argc,char *argv[]) {
     case 'h': height=atoi(optarg); break;
     case 'm': maxiter=atoi(optarg); break;
     case 'O': oldmaxiter=atoi(optarg); break;
+    case 'K': sscanf(optarg, "%Lf", &de_k); break;
     case 'M':
       if (optarg[0] == 's') {
 	mode=MODE_SPEED;
@@ -585,6 +589,7 @@ int main(int argc,char *argv[]) {
   for (tempindex=0; tempindex<ncores; tempindex++) {
     cfg[tempindex].taskid = -1;
     cfg[tempindex].mode = mode;
+    cfg[tempindex].de_k = de_k;
   }
 
   point_x0=centx-dx/2;
