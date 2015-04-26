@@ -247,7 +247,7 @@ unsigned long mandelde(FLOAT cx, FLOAT cy, unsigned long maxiter, FLOAT k) {
 #endif
   if (i == 0) return maxiter;
   else {
-    FLOAT r = -maxiter * log(log(zx2 + zy2) *
+    FLOAT r = ((FLOAT)maxiter) * (log(zx2 + zy2) *
 			    sqrt((zx2 + zy2) / (dzx * dzx + dzy * dzy))) / k;
     if (r < 0) r=0;
     return ((long)r) % maxiter;
@@ -275,11 +275,27 @@ void *run_checkfilled(void *cfgi) {
     int v2 = ntohl(dumpbuffer[4 + x + y1 * width]);
     xval=XVAL(x);
     if (v1 == -1) {
-      v1=mandel(xval, yval, cfg->maxiter);
+      switch (cfg->mode) {
+      case MODE_DE:
+	v1=mandelde(xval, yval, cfg->maxiter, cfg->de_k);
+	break;
+      case MODE_NORMAL:
+      default:
+	v1=mandel(xval, yval, cfg->maxiter);
+	break;
+      }
       dumpbuffer[4 + x + y0 * width] = htonl(v1);
     }
     if (v2 == -1) {
-      v2=mandel(xval, yval1, cfg->maxiter);
+      switch (cfg->mode) {
+      case MODE_DE:
+	v2=mandelde(xval, yval1, cfg->maxiter, cfg->de_k);
+	break;
+      case MODE_NORMAL:
+      default:
+	v2=mandel(xval, yval1, cfg->maxiter);
+	break;
+      }
       dumpbuffer[4 + x + y1 * width] = htonl(v2);
     }
     if (v1 < cfg->maxiter || v2 < cfg->maxiter) {
@@ -295,11 +311,27 @@ void *run_checkfilled(void *cfgi) {
       int v2 = ntohl(dumpbuffer[4 + x1 + y * width]);
       yval=YVAL(y);
       if (v1 == -1) {
-	v1=mandel(xval, yval, cfg->maxiter);
+	switch (cfg->mode) {
+	case MODE_DE:
+	  v1=mandelde(xval, yval, cfg->maxiter, cfg->de_k);
+	  break;
+	case MODE_NORMAL:
+	default:
+	  v1=mandel(xval, yval, cfg->maxiter);
+	  break;
+	}
 	dumpbuffer[4 + x0 + y * width] = htonl(v1);
       }
       if (v2 == -1) {
-	v2=mandel(xval1, yval, cfg->maxiter);
+	switch (cfg->mode) {
+	case MODE_DE:
+	  v2=mandelde(xval1, yval, cfg->maxiter, cfg->de_k);
+	  break;
+	case MODE_NORMAL:
+	default:
+	  v2=mandel(xval1, yval, cfg->maxiter);
+	  break;
+	}
 	dumpbuffer[4 + x1 + y * width] = htonl(v2);
       }
       if (v1 < cfg->maxiter || v2 < cfg->maxiter) {
@@ -416,7 +448,7 @@ int main(int argc,char *argv[]) {
   unsigned long filesize=0;
   int file_handling=THMAND_MODE_INITIALIZE;
 
-  FLOAT de_k=400;
+  FLOAT de_k=21.5;
 
   static pthread_mutex_t lock;
 
@@ -622,6 +654,8 @@ int main(int argc,char *argv[]) {
 	cfg[tempindex].y1 = current->y1;
 	cfg[tempindex].done = 0;
 	cfg[tempindex].maxiter = maxiter;
+	cfg[tempindex].mode = mode;
+	cfg[tempindex].de_k = de_k;
 	cfg[tempindex].lock = &lock;
 	if (!pthread_create(&(threads[tempindex]), NULL, run_checkfilled, (void*)&(cfg[tempindex]))) {
 	  nthreads++;
@@ -641,6 +675,8 @@ int main(int argc,char *argv[]) {
 	cfg[tempindex].y1 = current->y1;
 	cfg[tempindex].done = 0;
 	cfg[tempindex].maxiter = maxiter;
+	cfg[tempindex].mode = mode;
+	cfg[tempindex].de_k = de_k;
 	cfg[tempindex].lock = &lock;
 	if (!pthread_create(&(threads[tempindex]), NULL, run_dowork, (void*)&(cfg[tempindex]))) {
 	  nthreads++;
