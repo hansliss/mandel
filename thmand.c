@@ -231,7 +231,7 @@ unsigned long mandelde(FLOAT cx, FLOAT cy, unsigned long maxiter, FLOAT k) {
   unsigned long i=maxiter;
   FLOAT zx=cx,zy=cy,zx2=cx*cx,zy2=cy*cy;
   FLOAT dzx = 0, dzy = 0;
-  while((i>0)&&(zx2+zy2 < 4.0)) {
+  while((i>0)&&(zx2+zy2 <= 4.0)) {
     FLOAT tmp = 2 * (zx * dzx - zy * dzy) + 1;
     dzy = 2 * (zx * dzy + zy * dzx);
     dzx = tmp;
