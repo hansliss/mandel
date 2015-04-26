@@ -247,9 +247,9 @@ unsigned long mandelde(FLOAT cx, FLOAT cy, unsigned long maxiter, FLOAT k) {
 #endif
   if (i == 0) return maxiter;
   else {
-    FLOAT r = maxiter * log(log(zx2 + zy2) *
+    FLOAT r = -maxiter * log(log(zx2 + zy2) *
 			    sqrt((zx2 + zy2) / (dzx * dzx + dzy * dzy))) / k;
-    if (r < 0) r=-r;
+    if (r < 0) r=0;
     return ((long)r) % maxiter;
   }
 }
