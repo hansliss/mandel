@@ -232,8 +232,8 @@ unsigned long mandelde(FLOAT cx, FLOAT cy, unsigned long maxiter, FLOAT k) {
   FLOAT zx=cx,zy=cy,zx2=cx*cx,zy2=cy*cy;
   FLOAT dzx = 0, dzy = 0;
   while((i>0)&&(zx2+zy2 <= 4.0)) {
-    FLOAT tmp = 2 * (zx * dzx - zy * dzy) + 1;
-    dzy = 2 * (zx * dzy + zy * dzx);
+    FLOAT tmp = 2.0 * (zx * dzx - zy * dzy) + 1.0;
+    dzy = 2.0 * (zx * dzy + zy * dzx);
     dzx = tmp;
 
     zy=2*zx*zy + cy;
@@ -247,8 +247,8 @@ unsigned long mandelde(FLOAT cx, FLOAT cy, unsigned long maxiter, FLOAT k) {
 #endif
   if (i == 0) return maxiter;
   else {
-    FLOAT r = ((FLOAT)maxiter) * (log(zx2 + zy2) *
-			    sqrt((zx2 + zy2) / (dzx * dzx + dzy * dzy))) / k;
+    FLOAT r = ((FLOAT)maxiter) * (log10l(zx2 + zy2) *
+			    sqrtl((zx2 + zy2) / (dzx * dzx + dzy * dzy))) / k;
     if (r < 0) r=0;
     return ((long)r) % maxiter;
   }
