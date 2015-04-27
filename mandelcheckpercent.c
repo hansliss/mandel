@@ -42,7 +42,7 @@ int main(int argc,char *argv[]) {
   FILE *dumpfile;
   char *dumpfilename=NULL;
   long totpix_done=0, maxiter_count=0, highval_count=0;
-  unsigned long maxiter=1048576L;
+  unsigned long maxiter=0;
   while ((o=getopt(argc, argv, "i:m:")) != EOF) {
     switch (o) {
     case 'i': dumpfilename=optarg; break;
@@ -70,6 +70,13 @@ int main(int argc,char *argv[]) {
   }
   header.width=ntohl(header.width);
   header.height=ntohl(header.height);
+  header.maxiter=ntohl(header.maxiter);
+
+  if (maxiter == 0) {
+    maxiter = header.maxiter;
+    printf("Maxiter set to %d as read from file.\n", header.maxiter);
+  }
+
   totpix=(long)header.width*header.height;
 
   if ((dumpbuffer=(int *)mmap(NULL,
