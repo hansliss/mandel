@@ -35,8 +35,9 @@ int main(int argc,char *argv[]) {
   long highest_value=0;
   long nexthighest_value=0;
   static int *dumpbuffer=NULL;
+  static int histbuffer[20];
   fileheader header;
-  int x, y;
+  int x, y, i;
   int o;
   FILE *dumpfile;
   char *dumpfilename=NULL;
@@ -48,6 +49,10 @@ int main(int argc,char *argv[]) {
     case 'm': maxiter=atoi(optarg); break;
     default: usage(argv[0]); return -1; break;
     }
+  }
+  
+  for (i=0; i<20; i++) {
+    histbuffer[i] = 0;
   }
 
   if (dumpfilename==NULL) {
@@ -83,7 +88,10 @@ int main(int argc,char *argv[]) {
     fprintf(stderr, "%d\r", y);
     for (x=0; x<header.width; x++) {
       int val=ntohl(dumpbuffer[4 + x + y * header.width]);
-      if (val != -1) totpix_done++;
+      if (val != -1) {
+	totpix_done++;
+	if (val < maxiter) histbuffer[(20 * val) / maxiter]++;
+      }
       if (val != maxiter) {
 	if (val > highval_threshold) highval_count++;
 	if (val > highest_value) {
@@ -105,6 +113,11 @@ int main(int argc,char *argv[]) {
   printf("Highest two values: %ld and %ld.\n", nexthighest_value, highest_value);
   if (highest_value > maxiter || (highest_value < maxiter && maxiter_count == 0)) {
     printf("You know, %ld %swasn't used as max iterations for this one. I suspect %ld was...\n", maxiter, (maxiter>highest_value)?"probably ":"", highest_value);
+  }
+
+  printf("Histogram:\n");
+  for (i=0; i<20; i++) {
+    printf("\t%d\t%d\n",i,histbuffer[i]);
   }
 
   if (munmap(dumpbuffer, sizeof(header) + sizeof(int) * (header.width * header.height)) == -1) {
