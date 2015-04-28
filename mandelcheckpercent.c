@@ -89,13 +89,15 @@ void writepng(char *filename, fileheader *header, int highest_value, int *dumpbu
 
   row_pointers = png_malloc(png_ptr,sizeof(png_bytep) * header->height);
   for (y=0; y < header->height; y++) {
-    row_pointers[y]= png_malloc(png_ptr, 2*header->width);
+    row_pointers[y]= png_malloc(png_ptr, 2 * header->width);
     for (x=0; x < header->width; x++) {
-      int val=ntohl(dumpbuffer[4 + x + (header->height-y-1) * header->width]);
+      unsigned int val=ntohl(dumpbuffer[4 + x + (header->height-y-1) * header->width]);
       if (val == header->maxiter) val=65535;
-      else val = (65535 * val) / highest_value;
-      row_pointers[y][x*2] = (val % 0xFF00) >> 8;
-      row_pointers[y][x*2+1] = val % 0xFF;
+      else val = 65534 - (val * 65534) / highest_value;
+
+      // Network byte order - MSB first
+      row_pointers[y][x*2] = (val & 0xFF00) >> 8;
+      row_pointers[y][x*2+1] = val & 0xFF;
     }
   }
   png_write_image(png_ptr, row_pointers);
