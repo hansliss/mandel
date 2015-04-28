@@ -91,21 +91,22 @@ void writepng(char *filename, fileheader *header, int lowest_value, int highest_
     abort_("[write_png_file] Error during writing bytes");
 
   row_pointers = png_malloc(png_ptr,sizeof(png_bytep) * header->height);
-  int maxval=(1 << bits) - 1;
+  int maxval=(1 << bits) - 1; 
   for (y=0; y < header->height; y++) {
     row_pointers[y]= png_malloc(png_ptr, (bits/8) * header->width);
     for (x=0; x < header->width; x++) {
-      unsigned int val=ntohl(dumpbuffer[4 + x + (header->height-y-1) * header->width]);
-      if (val == header->maxiter) val=maxval;
+      unsigned int val, inval=ntohl(dumpbuffer[4 + x + (header->height-y-1) * header->width]);
+      if (inval == header->maxiter) val=maxval;
       else {
-	if (val > highest_value) val=highest_value;
-	val = ((val - lowest_value) * (maxval-1)) / (highest_value-lowest_value);
+	if (inval > highest_value) val=highest_value;
+	else val=inval;
+	val = ((long double)(val - lowest_value) * (long double)(maxval-1)) / (long double)(highest_value-lowest_value);
       }
-
+      printf("%d %d\n", inval, val);
       // Network byte order - MSB first
       if (bits==16) {
 	row_pointers[y][x*2] = (val & 0xFF00) >> 8;
-	row_pointers[y][x*2+1] = val & 0xFF;
+	row_pointers[y][x*2 + 1] = val & 0xFF;
       } else {
 	row_pointers[y][x] = val & 0xFF;
       }
@@ -233,7 +234,7 @@ int main(int argc,char *argv[]) {
   }
   // Filter out the straddlers at the top end so they don't corrupt the scaling
   i=19;
-  while (i > 0 && ((double)histbuffer[i]/(double)totpix) < 1E-3) i--;
+  while (i > 0 && ((double)histbuffer[i]/(double)totpix) < 2.4E-4) i--;
   highest_value=((i + 1) * maxiter / 20);
   if (highest_value >= maxiter) highest_value=maxiter-1;
   printf("highest value after adjustment: %ld\n", highest_value);
