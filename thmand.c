@@ -49,6 +49,9 @@ static int *dumpbuffer=NULL;
 static long totpix_done=0;
 static long lasttotpix_done=0;
 
+static FLOAT minde=1E14;
+static FLOAT maxde=-1E14;
+
 typedef struct fileheader_s {
   int width;
   int height;
@@ -121,6 +124,7 @@ struct taskconfig {
   unsigned int y1;
   unsigned long maxiter;
   FLOAT de_k;
+  int de_logr;
   int mode;
   int done;
   pthread_mutex_t *lock;
@@ -227,7 +231,7 @@ unsigned long mandelangle(FLOAT cx, FLOAT cy, unsigned long maxiter) {
     2 * (zx * dzx + zx * dzy * i + zy * dzx * i - zy * dzy) + 1
     2 * zx * dzx - 2 * zy * dzy + (2 * zx * dzy + 2* zy * dzx) * i + 1
 */ 
-unsigned long mandelde(FLOAT cx, FLOAT cy, unsigned long maxiter, FLOAT k) {
+unsigned long mandelde(FLOAT cx, FLOAT cy, unsigned long maxiter, FLOAT k, int logr) {
   unsigned long i=maxiter;
   FLOAT zx=cx,zy=cy,zx2=cx*cx,zy2=cy*cy;
   FLOAT dzx = 0, dzy = 0;
@@ -247,8 +251,15 @@ unsigned long mandelde(FLOAT cx, FLOAT cy, unsigned long maxiter, FLOAT k) {
 #endif
   if (i == 0) return maxiter;
   else {
-    FLOAT r = ((FLOAT)maxiter) * (log10l(zx2 + zy2) *
-				  sqrtl((zx2 + zy2) / (dzx * dzx + dzy * dzy))) / k;
+    FLOAT r;
+    FLOAT de=log10l(zx2 + zy2) * sqrtl((zx2 + zy2) / (dzx * dzx + dzy * dzy));
+    if (de > maxde) maxde=de;
+    if (de < minde) minde=de;
+    if (logr) {
+      r = ((FLOAT)maxiter) * log10l(1/de) / k;
+    } else {
+      r = ((FLOAT)maxiter) * de / k;
+    }
     if (r < 0) r=0;
     return ((long)r) % maxiter;
   }
@@ -277,7 +288,7 @@ void *run_checkfilled(void *cfgi) {
     if (v1 == -1) {
       switch (cfg->mode) {
       case MODE_DE:
-	v1=mandelde(xval, yval, cfg->maxiter, cfg->de_k);
+	v1=mandelde(xval, yval, cfg->maxiter, cfg->de_k, cfg->de_logr);
 	break;
       case MODE_NORMAL:
       default:
@@ -289,7 +300,7 @@ void *run_checkfilled(void *cfgi) {
     if (v2 == -1) {
       switch (cfg->mode) {
       case MODE_DE:
-	v2=mandelde(xval, yval1, cfg->maxiter, cfg->de_k);
+	v2=mandelde(xval, yval1, cfg->maxiter, cfg->de_k, cfg->de_logr);
 	break;
       case MODE_NORMAL:
       default:
@@ -313,7 +324,7 @@ void *run_checkfilled(void *cfgi) {
       if (v1 == -1) {
 	switch (cfg->mode) {
 	case MODE_DE:
-	  v1=mandelde(xval, yval, cfg->maxiter, cfg->de_k);
+	  v1=mandelde(xval, yval, cfg->maxiter, cfg->de_k, cfg->de_logr);
 	  break;
 	case MODE_NORMAL:
 	default:
@@ -325,7 +336,7 @@ void *run_checkfilled(void *cfgi) {
       if (v2 == -1) {
 	switch (cfg->mode) {
 	case MODE_DE:
-	  v2=mandelde(xval1, yval, cfg->maxiter, cfg->de_k);
+	  v2=mandelde(xval1, yval, cfg->maxiter, cfg->de_k, cfg->de_logr);
 	  break;
 	case MODE_NORMAL:
 	default:
@@ -386,7 +397,7 @@ void *run_dowork(void *cfgi) {
 	  val=mandelangle(xval, yval, cfg->maxiter);
 	  break;
 	case MODE_DE:
-	  val=mandelde(xval, yval, cfg->maxiter, cfg->de_k);
+	  val=mandelde(xval, yval, cfg->maxiter, cfg->de_k, cfg->de_logr);
 	  break;
 	case MODE_NORMAL:
 	default:
@@ -408,7 +419,7 @@ void *run_dowork(void *cfgi) {
 }
 
 void usage(char *progname) {
-  fprintf(stderr,"Usage: %s -d <def. file> -o <out file> -w <width> -h <height> -m <max iterations> [-p <cpu cores>] [-O <old max iterations>] [-M <mode: s for speed, a for angle, d for distance estimator>] [-K <K for DE alg>]\n", progname);
+  fprintf(stderr,"Usage: %s -d <def. file> -o <out file> -w <width> -h <height> -m <max iterations> [-p <cpu cores>] [-O <old max iterations>] [-M <mode: s for speed, a for angle, d for distance estimator>] [-K <K for DE alg>] [-L (use the log() of the DE result)]\n", progname);
   fprintf(stderr,"\tWhere <file> contains three values, each on one line:\n");
   fprintf(stderr,"\t  center X\n\t  center Y\n\t  width.\n");
 }
@@ -449,13 +460,14 @@ int main(int argc,char *argv[]) {
   int file_handling=THMAND_MODE_INITIALIZE;
 
   FLOAT de_k=21.5;
+  int de_logr=0;
 
   static pthread_mutex_t lock;
 
   long totpix=(long)width*height;
 
   snprintf(logprefix, sizeof(logprefix), "thmand: ");
-  while ((o=getopt(argc, argv, "d:o:p:w:h:m:O:M:K:")) != EOF) {
+  while ((o=getopt(argc, argv, "d:o:p:w:h:m:O:M:K:L")) != EOF) {
     switch (o) {
     case 'd': deffilename=optarg; break;
     case 'o': dumpfilename=optarg; break;
@@ -465,6 +477,7 @@ int main(int argc,char *argv[]) {
     case 'm': maxiter=atoi(optarg); break;
     case 'O': oldmaxiter=atoi(optarg); break;
     case 'K': sscanf(optarg, "%Lf", &de_k); break;
+    case 'L': de_logr=1; break;
     case 'M':
       if (optarg[0] == 's') {
 	mode=MODE_SPEED;
@@ -622,6 +635,7 @@ int main(int argc,char *argv[]) {
     cfg[tempindex].taskid = -1;
     cfg[tempindex].mode = mode;
     cfg[tempindex].de_k = de_k;
+    cfg[tempindex].de_logr = de_logr;
   }
 
   point_x0=centx-dx/2;
@@ -656,6 +670,7 @@ int main(int argc,char *argv[]) {
 	cfg[tempindex].maxiter = maxiter;
 	cfg[tempindex].mode = mode;
 	cfg[tempindex].de_k = de_k;
+	cfg[tempindex].de_logr = de_logr;
 	cfg[tempindex].lock = &lock;
 	if (!pthread_create(&(threads[tempindex]), NULL, run_checkfilled, (void*)&(cfg[tempindex]))) {
 	  nthreads++;
@@ -677,6 +692,7 @@ int main(int argc,char *argv[]) {
 	cfg[tempindex].maxiter = maxiter;
 	cfg[tempindex].mode = mode;
 	cfg[tempindex].de_k = de_k;
+	cfg[tempindex].de_logr = de_logr;
 	cfg[tempindex].lock = &lock;
 	if (!pthread_create(&(threads[tempindex]), NULL, run_dowork, (void*)&(cfg[tempindex]))) {
 	  nthreads++;
@@ -710,6 +726,7 @@ int main(int argc,char *argv[]) {
   if (munmap(dumpbuffer, sizeof(header) + sizeof(int) * (width * height)) == -1) {
     perror("munmap()");
   }
+  if (mode==MODE_DE) printf("minde=%Lg, maxde=%Lg\n", minde, maxde);
 
   fclose(dumpfile);
   return 0;

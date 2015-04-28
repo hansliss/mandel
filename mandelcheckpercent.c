@@ -47,8 +47,11 @@ typedef struct fileheader_s {
 } fileheader;
 
 #ifdef HAVE_LIBPNG
-void writepng(char *filename, fileheader *header, int highest_value, int *dumpbuffer) {
+void writepng(char *filename, fileheader *header, int lowest_value, int highest_value, int *dumpbuffer, int sixteenbits) {
   int x, y;
+
+  int bits=8;
+  if (sixteenbits) bits=16;
 
   png_structp png_ptr;
   png_infop info_ptr;
@@ -78,7 +81,7 @@ void writepng(char *filename, fileheader *header, int highest_value, int *dumpbu
     abort_("[write_png_file] Error during writing header");
 
   png_set_IHDR(png_ptr, info_ptr, header->width, header->height,
-	       16, PNG_COLOR_TYPE_GRAY, PNG_INTERLACE_NONE,
+	       bits, PNG_COLOR_TYPE_GRAY, PNG_INTERLACE_NONE,
 	       PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
 
   png_write_info(png_ptr, info_ptr);
@@ -88,16 +91,24 @@ void writepng(char *filename, fileheader *header, int highest_value, int *dumpbu
     abort_("[write_png_file] Error during writing bytes");
 
   row_pointers = png_malloc(png_ptr,sizeof(png_bytep) * header->height);
+  int maxval=(1 << bits) - 1;
   for (y=0; y < header->height; y++) {
-    row_pointers[y]= png_malloc(png_ptr, 2 * header->width);
+    row_pointers[y]= png_malloc(png_ptr, (bits/8) * header->width);
     for (x=0; x < header->width; x++) {
       unsigned int val=ntohl(dumpbuffer[4 + x + (header->height-y-1) * header->width]);
-      if (val == header->maxiter) val=65535;
-      else val = 65534 - (val * 65534) / highest_value;
+      if (val == header->maxiter) val=maxval;
+      else {
+	if (val > highest_value) val=highest_value;
+	val = ((val - lowest_value) * (maxval-1)) / (highest_value-lowest_value);
+      }
 
       // Network byte order - MSB first
-      row_pointers[y][x*2] = (val & 0xFF00) >> 8;
-      row_pointers[y][x*2+1] = val & 0xFF;
+      if (bits==16) {
+	row_pointers[y][x*2] = (val & 0xFF00) >> 8;
+	row_pointers[y][x*2+1] = val & 0xFF;
+      } else {
+	row_pointers[y][x] = val & 0xFF;
+      }
     }
   }
   png_write_image(png_ptr, row_pointers);
@@ -120,6 +131,7 @@ void writepng(char *filename, fileheader *header, int highest_value, int *dumpbu
 int main(int argc,char *argv[]) {
   long totpix;
   long highest_value=0;
+  long lowest_value=999999999999;
   long nexthighest_value=0;
   static int *dumpbuffer=NULL;
   static int histbuffer[20];
@@ -127,15 +139,17 @@ int main(int argc,char *argv[]) {
   char *pngfilename = NULL;
   int x, y, i;
   int o;
+  int sixteenbits=1;
   FILE *dumpfile;
   char *dumpfilename=NULL;
   long totpix_done=0, maxiter_count=0, highval_count=0;
   unsigned long maxiter=0;
-  while ((o=getopt(argc, argv, "i:m:P:")) != EOF) {
+  while ((o=getopt(argc, argv, "i:m:P:8")) != EOF) {
     switch (o) {
     case 'i': dumpfilename=optarg; break;
     case 'm': maxiter=atoi(optarg); break;
     case 'P': pngfilename=optarg; break;
+    case '8': sixteenbits=0; break;
     default: usage(argv[0]); return -1; break;
     }
   }
@@ -189,6 +203,7 @@ int main(int argc,char *argv[]) {
 	if (val < maxiter) histbuffer[(20 * val) / maxiter]++;
       }
       if (val != maxiter) {
+	if (val < lowest_value) lowest_value=val;
 	if (val > highval_threshold) highval_count++;
 	if (val > highest_value) {
 	  nexthighest_value = highest_value;
@@ -206,6 +221,7 @@ int main(int argc,char *argv[]) {
 	 100*(double)maxiter_count/(double)totpix);
   printf("%ld - %g%% - high value points (within 5%% from maxiter).\n",
 	 highval_count, 100*(double)highval_count/(double)totpix);
+  printf("Lowest value: %ld.\n", lowest_value);
   printf("Highest two values: %ld and %ld.\n", nexthighest_value, highest_value);
   if (highest_value > maxiter || (highest_value < maxiter && maxiter_count == 0)) {
     printf("You know, %ld %swasn't used as max iterations for this one. I suspect %ld was...\n", maxiter, (maxiter>highest_value)?"probably ":"", highest_value);
@@ -215,10 +231,16 @@ int main(int argc,char *argv[]) {
   for (i=0; i<20; i++) {
     printf("\t%d\t%d\n",i,histbuffer[i]);
   }
+  // Filter out the straddlers at the top end so they don't corrupt the scaling
+  i=19;
+  while (i > 0 && ((double)histbuffer[i]/(double)totpix) < 1E-3) i--;
+  highest_value=((i + 1) * maxiter / 20);
+  if (highest_value >= maxiter) highest_value=maxiter-1;
+  printf("highest value after adjustment: %ld\n", highest_value);
 
   if (pngfilename != NULL) {
 #ifdef HAVE_LIBPNG
-    writepng(pngfilename, &header, highest_value, dumpbuffer);
+    writepng(pngfilename, &header, lowest_value, highest_value, dumpbuffer, sixteenbits);
 #else
     fprintf(stderr, "No png support on this system.\n");
 #endif
