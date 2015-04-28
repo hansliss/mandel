@@ -95,14 +95,13 @@ void writepng(char *filename, fileheader *header, int lowest_value, int highest_
   for (y=0; y < header->height; y++) {
     row_pointers[y]= png_malloc(png_ptr, (bits/8) * header->width);
     for (x=0; x < header->width; x++) {
-      unsigned int val, inval=ntohl(dumpbuffer[4 + x + (header->height-y-1) * header->width]);
+      unsigned int val, inval=ntohl(dumpbuffer[4 + x + y * header->width]);
       if (inval == header->maxiter) val=maxval;
       else {
 	if (inval > highest_value) val=highest_value;
 	else val=inval;
 	val = ((long double)(val - lowest_value) * (long double)(maxval-1)) / (long double)(highest_value-lowest_value);
       }
-      printf("%d %d\n", inval, val);
       // Network byte order - MSB first
       if (bits==16) {
 	row_pointers[y][x*2] = (val & 0xFF00) >> 8;
