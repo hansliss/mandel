@@ -18,7 +18,9 @@
 #include <sys/time.h>
 #include <time.h>
 #include <sys/mman.h>
+#if HAVE_LIBPNG == 1
 #include <png.h>
+#endif
 
 void usage(char *progname) {
   fprintf(stderr,"Usage: %s -i <dump file> [-m <max iterations>]\n", progname);
@@ -41,6 +43,7 @@ typedef struct fileheader_s {
   int reserved;
 } fileheader;
 
+#if HAVE_LIBPNG == 1
 void writepng(char *filename, fileheader *header, int highest_value, int *dumpbuffer) {
   int x, y;
 
@@ -106,8 +109,8 @@ void writepng(char *filename, fileheader *header, int highest_value, int *dumpbu
   png_free(png_ptr, row_pointers);
 
   fclose(fp);
-
 }
+#endif
 
 int main(int argc,char *argv[]) {
   long totpix;
@@ -209,7 +212,11 @@ int main(int argc,char *argv[]) {
   }
 
   if (pngfilename != NULL) {
+#if HAVE_LIBPNG == 1
     writepng(pngfilename, &header, highest_value, dumpbuffer);
+#else
+    fprintf(stderr, "No png support on this system.\n");
+#endif
   }
 
   if (munmap(dumpbuffer, sizeof(header) + sizeof(int) * (header.width * header.height)) == -1) {

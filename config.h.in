@@ -54,6 +54,8 @@
 #define HAVE_USTAT_H 0 /* <ustat.h> */
 #define HAVE_SYS_STATVFS_H 0 /* <sys/statvfs.h> */
 
+#define HAVE_LIBPNG 0
+
 /* If major and minor are not defined in <sys/types.h>, but are in
    <sys/mkdev.h>, set MAJOR_IN_MKDEV to 1.  If they are in
    <sys/sysmacros.h>, set MAJOR_IN_SYSMACROS to 1.  */
