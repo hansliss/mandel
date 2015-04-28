@@ -1,5 +1,7 @@
 #define _FILE_OFFSET_BITS 64
 
+#include "config.h"
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <fcntl.h>
@@ -18,7 +20,8 @@
 #include <sys/time.h>
 #include <time.h>
 #include <sys/mman.h>
-#if HAVE_LIBPNG == 1
+
+#ifdef HAVE_LIBPNG
 #include <png.h>
 #endif
 
@@ -43,7 +46,7 @@ typedef struct fileheader_s {
   int reserved;
 } fileheader;
 
-#if HAVE_LIBPNG == 1
+#ifdef HAVE_LIBPNG
 void writepng(char *filename, fileheader *header, int highest_value, int *dumpbuffer) {
   int x, y;
 
@@ -212,7 +215,7 @@ int main(int argc,char *argv[]) {
   }
 
   if (pngfilename != NULL) {
-#if HAVE_LIBPNG == 1
+#ifdef HAVE_LIBPNG
     writepng(pngfilename, &header, highest_value, dumpbuffer);
 #else
     fprintf(stderr, "No png support on this system.\n");
