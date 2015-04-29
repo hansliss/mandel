@@ -47,7 +47,7 @@ typedef struct fileheader_s {
 } fileheader;
 
 #ifdef HAVE_LIBPNG
-void writepng(char *filename, fileheader *header, int lowest_value, int highest_value, int *dumpbuffer, int sixteenbits) {
+void writepng(char *filename, fileheader *header, int lowest_value, int highest_value, int *dumpbuffer, int sixteenbits, int dolog) {
   int x, y;
 
   int bits=8;
@@ -100,6 +100,9 @@ void writepng(char *filename, fileheader *header, int lowest_value, int highest_
       else {
 	if (inval > highest_value) val=highest_value;
 	else val=inval;
+	if (dolog) {
+	  val=lowest_value + (double)(highest_value - lowest_value) * log10(val)/log10(highest_value);
+	}
 	val = ((long double)(val - lowest_value) * (long double)(maxval-1)) / (long double)(highest_value-lowest_value);
       }
       // Network byte order - MSB first
@@ -140,16 +143,18 @@ int main(int argc,char *argv[]) {
   int x, y, i;
   int o;
   int sixteenbits=1;
+  int dolog=0;
   FILE *dumpfile;
   char *dumpfilename=NULL;
   long totpix_done=0, maxiter_count=0, highval_count=0;
   unsigned long maxiter=0;
-  while ((o=getopt(argc, argv, "i:m:P:8")) != EOF) {
+  while ((o=getopt(argc, argv, "i:m:P:8L")) != EOF) {
     switch (o) {
     case 'i': dumpfilename=optarg; break;
     case 'm': maxiter=atoi(optarg); break;
     case 'P': pngfilename=optarg; break;
     case '8': sixteenbits=0; break;
+    case 'L': dolog=1; break;
     default: usage(argv[0]); return -1; break;
     }
   }
@@ -240,7 +245,7 @@ int main(int argc,char *argv[]) {
 
   if (pngfilename != NULL) {
 #ifdef HAVE_LIBPNG
-    writepng(pngfilename, &header, lowest_value, highest_value, dumpbuffer, sixteenbits);
+    writepng(pngfilename, &header, lowest_value, highest_value, dumpbuffer, sixteenbits, dolog);
 #else
     fprintf(stderr, "No png support on this system.\n");
 #endif
