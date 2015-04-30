@@ -208,7 +208,7 @@ int main(int argc,char *argv[]) {
 	if (val < maxiter) histbuffer[(20 * val) / maxiter]++;
       }
       if (val != maxiter) {
-	if (val < lowest_value) lowest_value=val;
+	if (val != -1 && val < lowest_value) lowest_value=val;
 	if (val > highval_threshold) highval_count++;
 	if (val > highest_value) {
 	  nexthighest_value = highest_value;
@@ -226,7 +226,7 @@ int main(int argc,char *argv[]) {
 	 100*(double)maxiter_count/(double)totpix);
   printf("%ld - %g%% - high value points (within 5%% from maxiter).\n",
 	 highval_count, 100*(double)highval_count/(double)totpix);
-  printf("Lowest value: %ld.\n", lowest_value);
+  if (lowest_value != 999999999999) printf("Lowest value: %ld.\n", lowest_value);
   printf("Highest two values: %ld and %ld.\n", nexthighest_value, highest_value);
   if (highest_value > maxiter || (highest_value < maxiter && maxiter_count == 0)) {
     printf("You know, %ld %swasn't used as max iterations for this one. I suspect %ld was...\n", maxiter, (maxiter>highest_value)?"probably ":"", highest_value);
