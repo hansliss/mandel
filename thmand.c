@@ -59,6 +59,18 @@ typedef struct fileheader_s {
   int reserved;
 } fileheader;
 
+void ld_epsilon(long double *rval) {
+  long double f_epsilon, testval, one, two;
+  one=(long double)1.0;
+  two=(long double)2.0;
+  f_epsilon=(long double)1.0;
+  do {
+    (*rval)=f_epsilon;
+    f_epsilon /= two;
+    testval = one + f_epsilon;
+  } while (testval > one);
+}
+
 void *run(void *cfg);
 
 #define max(x,y) (((x)>(y))?(x):(y))
@@ -465,6 +477,10 @@ int main(int argc,char *argv[]) {
   static pthread_mutex_t lock;
 
   long totpix=(long)width*height;
+
+  long double epsilon;
+  ld_epsilon(&epsilon);
+  fprintf(stderr, "Epsilon is %Lg\n", epsilon);
 
   snprintf(logprefix, sizeof(logprefix), "thmand: ");
   while ((o=getopt(argc, argv, "d:o:p:w:h:m:O:M:K:L")) != EOF) {
