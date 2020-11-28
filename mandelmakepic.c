@@ -38,7 +38,7 @@ void hsv2rgb(float H,float S,float V,byte *R,byte *G,byte *B)
   p=V*(1.0-S);
   q=V*(1.0-(S*f));
   t=V*(1.0-(S*(1.0-f)));
-
+  
 #ifdef DEBUG2
   fprintf(logfile,"H=%3.4f, S=%3.4f, V=%3.4f, i=%d, f=%3.4f, p=%3.4f, q=%3.4f, t=%3.4f\n",H,S,V,i,f,p,q,t);
 #endif
@@ -51,6 +51,28 @@ void hsv2rgb(float H,float S,float V,byte *R,byte *G,byte *B)
     case 4: (*R)=t*255; (*G)=p*255; (*B)=V*255; break;
     case 5: (*R)=V*255; (*G)=p*255; (*B)=q*255; break;
     }
+}
+
+void kelvinToColor(double t, double *R, double *G, double *B) {
+  if (t <= 6500) {
+    if (t < 1000) {
+      *R=0;
+      *G=0;
+      *B=0;
+    } else {
+      *R=1;
+      *G=-8.09645459737e-13 * t * t * t - 4.47106840522e-9 * t * t + 2.37777009068e-4 * t - 0.194709442111;
+      if (t < 2000) {
+	*B=0;
+      } else {
+	*B=-5.87630502281e-12 * t * t * t + 8.76431011057e-8 * t * t -1.792244492e-4 * t + 5.75444669402e-2;
+      }
+    }
+  } else {
+    *R=(float)4383/t + 0.19;
+    *G=(float)3078.6/t + 0.4113;
+    *B=1;
+  }
 }
 
 #define max(x,y) (((x)>(y))?(x):(y))
@@ -139,6 +161,7 @@ void usage(char *progname) {
   fprintf(stderr, "\t[-P <prop spec for h, s and v value: 3 characters, where \"1\" means factors are proportional>]\n");
   fprintf(stderr, "\t[-R (remove more or less all-black or all-white images)] [-D (build directory structure)]\n");
   fprintf(stderr, "\t[-z <loval>] [-Z <hival>] [-O (highlight not just maxiter but all maxiter/(2^x))\n");
+  fprintf(stderr, "\t[-K <color temp offset>] [-k <color temp factor>]\n");
 }
 
 int checkForMaxiter(unsigned long val, unsigned long maxiter, int checkfractions) {
@@ -182,6 +205,7 @@ int main(int argc, char *argv[])
 
   long double hc=0.66, hk, sc=0, sk, vc=0, vk, hcs=0.66, scs=0, vcs=0, hcdiff=0, scdiff=0, vcdiff=0, rhk, rsk, rvk;
   long double hks=3.8, sks=5, vks=0, hdiff=0, sdiff=0, vdiff=0;
+  long double kc, kk;
   int hind, sind, vind, hcind, scind, vcind;
   int hsteps=1, ssteps=1, vsteps=1, hcsteps=1, scsteps=1, vcsteps=1;
   int hi=0, hl=0, si=1, sl=0, vi=1, vl=0, hp=0, sp=0, vp=0;
@@ -209,10 +233,11 @@ int main(int argc, char *argv[])
   long double def_x, def_y, def_dx;
 
   double h,s,v;
+  int hasColorTemp=0;
 
   signal(SIGCHLD, handler);
 
-  while ((o=getopt(argc, argv, "i:o:d:m:t:H:h:V:v:S:s:I:L:P:C:RDz:Z:O")) != -1) {
+  while ((o=getopt(argc, argv, "i:o:d:m:t:H:h:K:k:V:v:S:s:I:L:P:C:RDz:Z:O")) != -1) {
     switch (o) {
     case 'i': dumpfilename=optarg; break;
     case 'o': outfilename=optarg; break;
@@ -225,6 +250,14 @@ int main(int argc, char *argv[])
     case 'z': use_loval=atoi(optarg); break;
     case 'Z': use_hival=atoi(optarg); break;
     case 'O': checkfractions = 1; break;
+    case 'K':
+      sscanf(optarg, "%Lf", &kc);
+      hasColorTemp++;
+      break;
+    case 'k':
+      sscanf(optarg, "%Lf", &kk);
+      hasColorTemp++;
+      break;
     case 'H':
       if (sscanf(optarg, "%Lf,%i,%Lf", &hcs, &hcsteps, &hcdiff) != 3) {
 	hcsteps=1; hcdiff=0;
@@ -298,6 +331,12 @@ int main(int argc, char *argv[])
     }
   }
 
+  if (hasColorTemp == 2) {
+    hasColorTemp=1;
+  } else {
+    hasColorTemp=0;
+  }
+  
   if (!dumpfilename || !outfilename) {
     usage(argv[0]);
     return -1;
@@ -478,6 +517,12 @@ int main(int argc, char *argv[])
 				    strcat(tmpbuf2, tmpbuf1);
 				  }
 
+				  if (hasColorTemp) {
+				    sprintf(tmpbuf1, "-K%Lg -k%Lg", kc, kk);
+				    if (strlen(tmpbuf2)) strcat(tmpbuf2, " ");
+				    strcat(tmpbuf2, tmpbuf1);
+				  }
+
 				  sprintf(tmpbuf1, "-H%Lg -h%Lg -S%Lg -s%Lg -V%Lg -v%Lg -I %c%c%c -L %c%c%c -P%c%c%c%s\n",
 					  hc, rhk, sc, rsk, vc, rvk,
 					  hi?'1':'0', si?'1':'0', vi?'1':'0',
@@ -531,6 +576,15 @@ int main(int argc, char *argv[])
 					double intgr;
 					double span=(hival-loval);
 					h=s=v=(colornum-loval) % (int)span;
+					double mr=1, mg=1, mb=1;
+					if (hasColorTemp) {
+					  int temp = (int)(kc + kk * h);
+					  while (temp < 0) {
+					    temp += 10000;
+					  }
+					  temp %= 10000;
+					  kelvinToColor(temp, &mg, &mg, &mb);
+					}
 					if (hl) h=logl(h)/logl(span); else h /= span;
 					if (sl) s=logl(s)/logl(span); else s /= span;
 					if (vl) v=logl(v)/logl(span); else v /= span;
@@ -544,6 +598,9 @@ int main(int argc, char *argv[])
 					h=v=1;s=0;
 #endif
 					hsv2rgb(h,s,v,&r,&g,&b);
+					r *= mr;
+					g *= mg;
+					b *= mb;
 					if (v < 0.05) blackpixels++;
 					if (v > 0.95 && s < 0.05) whitepixels++;
 					pixels++;
