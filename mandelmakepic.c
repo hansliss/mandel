@@ -138,8 +138,26 @@ void usage(char *progname) {
   fprintf(stderr, "\t[-L <log spec for h, s and v value: 3 characters, where \"1\" means we use log() of the corr. value>]\n");
   fprintf(stderr, "\t[-P <prop spec for h, s and v value: 3 characters, where \"1\" means factors are proportional>]\n");
   fprintf(stderr, "\t[-R (remove more or less all-black or all-white images)] [-D (build directory structure)]\n");
-  fprintf(stderr, "\t[-z <loval>] [-Z <hival>]\n");
+  fprintf(stderr, "\t[-z <loval>] [-Z <hival>] [-O (highlight not just maxiter but all maxiter/(2^x))\n");
 }
+
+int checkForMaxiter(unsigned long val, unsigned long maxiter, int checkfractions) {
+  if (val == maxiter) {
+    return 1;
+  }
+  else if (!checkfractions) {
+    return 0;
+  } else {
+    while (maxiter > 1) {
+      if (val == maxiter) {
+	return 1;
+      }
+      maxiter /= 2;
+    }
+  }
+  return 0;
+}
+
 
 void handler(int s)
 {
@@ -173,6 +191,8 @@ int main(int argc, char *argv[])
   int use_loval=-1;
   int use_hival=-1;
 
+  int checkfractions=0;
+
   struct stat statbuf;
 
   char *dumpfilename=NULL;
@@ -192,7 +212,7 @@ int main(int argc, char *argv[])
 
   signal(SIGCHLD, handler);
 
-  while ((o=getopt(argc, argv, "i:o:d:m:t:H:h:V:v:S:s:I:L:P:C:RDz:Z:")) != -1) {
+  while ((o=getopt(argc, argv, "i:o:d:m:t:H:h:V:v:S:s:I:L:P:C:RDz:Z:O")) != -1) {
     switch (o) {
     case 'i': dumpfilename=optarg; break;
     case 'o': outfilename=optarg; break;
@@ -204,6 +224,7 @@ int main(int argc, char *argv[])
     case 'D': build_subdirs=1; break;
     case 'z': use_loval=atoi(optarg); break;
     case 'Z': use_hival=atoi(optarg); break;
+    case 'O': checkfractions = 1; break;
     case 'H':
       if (sscanf(optarg, "%Lf,%i,%Lf", &hcs, &hcsteps, &hcdiff) != 3) {
 	hcsteps=1; hcdiff=0;
@@ -281,6 +302,10 @@ int main(int argc, char *argv[])
     usage(argv[0]);
     return -1;
   }
+
+  if (checkfractions) {
+    fprintf(stderr, "Will accentuate both values at maxiter and at maxiter divided by powers of two.\n");
+  }
     
   if (!(dumpfile=fopen(dumpfilename, "rb"))) { perror(dumpfilename); return -2; }
   if (fread(&header, sizeof(header), 1, dumpfile) != 1) {
@@ -310,7 +335,7 @@ int main(int argc, char *argv[])
   for (y=0; y<height; y++) {
     for (x=0; x<width; x++){
       int val = ntohl(dumpbuffer[4 + x + y * width]);
-      if (val != -1 && val != mival && val > vmax) vmax=val;
+      if (val != -1 && !checkForMaxiter(val, mival, checkfractions) && val > vmax) vmax=val;
     }
   }
   printf("Allocating histogram buffer.\n"); fflush(stdout);
@@ -324,7 +349,7 @@ int main(int argc, char *argv[])
     for (x=0; x<width; x++) {
       int val=ntohl(dumpbuffer[4 + x + y * width]);
       if (val != -1) {
-	if (val != mival)
+	if (!checkForMaxiter(val, mival, checkfractions))
 	  hist[val]++;
 	else
 	  maxiter++;
@@ -497,7 +522,7 @@ int main(int argc, char *argv[])
 					r=255;
 					g=0;
 					b=0;
-				      } else if (colornum == mival) {
+				      } else if (checkForMaxiter(colornum, mival, checkfractions)) {
 					r = 0;
 					g = 0;
 					b = 0;
